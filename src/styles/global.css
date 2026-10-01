@@ -254,6 +254,11 @@ dt { color: var(--text-secondary); font-family: var(--font-meta); font-size: .68
 .mode-dialog { width: min(460px, 100%); padding: clamp(28px, 6vw, 48px); background: var(--background-secondary); box-shadow: var(--shadow); }
 .mode-dialog h2 { margin-bottom: 30px; color: var(--accent); font-size: clamp(2rem, 7vw, 3.5rem); font-weight: 400; line-height: 1; }
 .mode-dialog form { display: grid; gap: 18px; }
+.password-field { position: relative; display: block; }
+.password-field input { padding-right: 48px; }
+.password-visibility-toggle { position: absolute; top: 50%; right: 8px; display: grid; width: 36px; height: 36px; place-items: center; border: 0; padding: 0; background: transparent; color: var(--text-secondary); transform: translateY(-50%); }
+.password-visibility-toggle:hover { color: var(--accent); }
+.password-visibility-toggle svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
 .mode-dialog-actions { display: flex; gap: 18px; flex-wrap: wrap; }
 .state-page { min-height: 100vh; display: grid; place-items: center; align-content: center; gap: 18px; background: var(--background); color: var(--text); }
 .loading-mark { width: 42px; height: 42px; border: 1px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
