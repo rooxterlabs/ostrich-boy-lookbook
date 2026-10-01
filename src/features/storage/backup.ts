@@ -1,5 +1,5 @@
 import type { ProjectData, StoredImage } from '../../models/lookbook'
-import { getImages, replaceAllData } from './database'
+import { getImages, replaceAllData } from './supabaseDatabase'
 
 interface BackupImage extends Omit<StoredImage, 'blob'> {
   dataUrl: string

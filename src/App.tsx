@@ -4,8 +4,8 @@ import type { GalleryUpload } from './components/ImageGallery'
 import { Header } from './components/Header'
 import { LookbookNavigation } from './components/LookbookNavigation'
 import { ModeSwitchDialog } from './components/ModeSwitchDialog'
-import { authenticateEditor, authenticateViewer, readSessionRole, writeSessionRole } from './features/auth/auth'
-import { deleteImage, getImages, loadProject, putImage, saveProject, saveProjectAndDeleteImages } from './features/storage/database'
+import { authenticateEditor, authenticateViewer, readSessionRole } from './features/auth/auth'
+import { deleteImage, getImages, loadProject, putImage, saveProject, saveProjectAndDeleteImages } from './features/storage/supabaseDatabase'
 import { categoryEntryType, newEntry } from './models/entry'
 import type { Category, LookbookEntry, ProjectData, Role, StoredImage } from './models/lookbook'
 import { EntryPage } from './pages/EntryPage'
@@ -41,14 +41,14 @@ export default function App() {
     }
     return () => channel.close()
   }, [role])
-  const setRole = (next: Role) => { writeSessionRole(next); setRoleState(next) }
+  const setRole = (next: Role) => setRoleState(next)
   const persist = async (next: ProjectData) => { const stamped = { ...next, updatedAt: new Date().toISOString() }; setProject(stamped); try { await saveProject(stamped); setError('') } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to save changes.') } }
   const visibleCategories = useMemo(() => project ? project.categories.filter((category) => !RETIRED_SEED_CATEGORY_IDS.has(category.id) && !category.archived && (role === 'editor' || category.status === 'approved')).sort((a, b) => a.order - b.order) : [], [project, role])
   const visibleEntries = useMemo(() => project ? project.entries.filter((entry) => !entry.archived && (role === 'editor' || entry.status === 'approved')) : [], [project, role])
   const visibleScenes = useMemo(() => project ? project.scenes.filter((scene) => role === 'editor' || scene.status === 'approved') : [], [project, role])
 
-  if (role === 'locked') return <LoginPage title="OSTRICH BOY — PRODUCTION LOOKBOOK" label="Viewer password" onSubmit={(password) => { if (!authenticateViewer(password)) return false; setRole('viewer'); return true }} />
-  if (loading) return <main className="state-page"><div className="loading-mark" /><p>Loading local lookbook…</p></main>
+  if (role === 'locked') return <LoginPage title="OSTRICH BOY — PRODUCTION LOOKBOOK" label="Viewer password" onSubmit={async (password) => { if (!await authenticateViewer(password)) return false; setRole('viewer'); return true }} />
+  if (loading) return <main className="state-page"><div className="loading-mark" /><p>Loading lookbook…</p></main>
   if (!project) return <main className="state-page"><h1>Lookbook unavailable</h1><p>{error || 'Browser storage could not be opened.'}</p><button className="button" onClick={() => location.reload()}>Try again</button></main>
 
   const folder = route.page === 'folder' ? visibleCategories.find((category) => category.id === route.id) : undefined
@@ -153,5 +153,5 @@ export default function App() {
     return <main className="page-shell"><div className="empty-state"><h1>{visibleCategories.length ? 'Select a category' : 'Your lookbook is empty.'}</h1><p>{role === 'editor' ? 'Use EDIT to add and manage your categories and entries.' : 'New material will appear here when it is added.'}</p></div></main>
   })()
 
-  return <div className="app-shell"><Header role={role} onHome={home} onSwitchMode={() => setSwitchingTo(role === 'editor' ? 'viewer' : 'editor')} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>OSTRICH BOY</span><p>Local prototype · Data remains in this browser profile</p></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onAction={editList} onClose={() => setEditing(undefined)} />}{switchingTo && <ModeSwitchDialog mode={switchingTo === 'editor' ? 'Editor' : 'Viewer'} onCancel={() => setSwitchingTo(undefined)} onSubmit={(password) => { const accepted = switchingTo === 'editor' ? authenticateEditor(password) : authenticateViewer(password); if (!accepted) return false; if (switchingTo === 'viewer' && !canViewerAccessCurrentRoute) home(); setRole(switchingTo); setSwitchingTo(undefined); return true }} />}</div>
+  return <div className="app-shell"><Header role={role} onHome={home} onSwitchMode={() => setSwitchingTo(role === 'editor' ? 'viewer' : 'editor')} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>OSTRICH BOY</span><p>Secure Supabase project storage</p></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onAction={editList} onClose={() => setEditing(undefined)} />}{switchingTo && <ModeSwitchDialog mode={switchingTo === 'editor' ? 'Editor' : 'Viewer'} onCancel={() => setSwitchingTo(undefined)} onSubmit={async (password) => { const accepted = switchingTo === 'editor' ? await authenticateEditor(password) : await authenticateViewer(password); if (!accepted) return false; if (switchingTo === 'viewer' && !canViewerAccessCurrentRoute) home(); setRole(switchingTo); setSwitchingTo(undefined); return true }} />}</div>
 }

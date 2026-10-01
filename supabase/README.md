@@ -20,7 +20,11 @@ Editor, or apply it with an authenticated Supabase CLI session. It creates:
 - `lookbook_images` for image metadata and editorial transforms;
 - the private `lookbook-images` Storage bucket.
 
-The first migration deliberately grants no browser access. Remote reads and
-writes remain disabled until Viewer/Editor authentication can enforce the
-correct Row Level Security and Storage policies. The existing IndexedDB data
-continues to be the active data source in the meantime.
+After creating the two Supabase Auth users, run
+`migrations/20261001010000_add_viewer_editor_auth.sql`. It assigns their roles
+and enables Row Level Security policies: Viewer can read; Editor can read and
+write. The app never stores either password in source or environment files.
+
+On the first successful Editor login, an empty remote project is initialized
+from the existing IndexedDB project and its images. Supabase becomes the active
+data source after authentication.

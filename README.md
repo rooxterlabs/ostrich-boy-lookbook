@@ -23,24 +23,24 @@ npm run build
 
 The production bundle is written to `dist` and can be previewed locally with `npm run dev -- --host 127.0.0.1` or `npx vite preview`. This project has no deployment configuration.
 
-## Prototype access
+## Secure access
 
-- Viewer password: `viewer`
-- Editor password: `editor` (enter Viewer mode first, then choose **switch to: Editor Mode**)
+- Viewer credentials provide read-only access.
+- Editor credentials provide read and write access.
 
-These checks happen in the browser and are intentionally isolated in `src/features/auth/auth.ts` so they can be replaced later. They are **not secure authentication** and do not protect confidential production material.
+Passwords are verified by Supabase Auth and are never stored in this repository or in browser environment variables. Database and Storage permissions are enforced by Row Level Security.
 
 ## Testing the flows
 
-1. Enter `viewer` and confirm only Approved folders and entries are visible.
-2. Choose **switch to: Editor Mode**, enter `editor`, and edit a folder or entry.
+1. Enter the Viewer password and confirm only Approved folders and entries are visible.
+2. Choose **switch to: Editor Mode**, enter the Editor password, and edit a folder or entry.
 3. Create a category or entry and confirm it defaults to Approved, then change its workflow state, link scenes, and save.
 4. Upload multiple images, edit captions, reorder them, choose a primary image, and delete one after confirmation.
 5. Open **Master Item List** and **Master Scene List** to confirm associations and filters.
-6. Choose **switch to: Viewer Mode**, enter `viewer`, and confirm editing controls are no longer available.
+6. Choose **switch to: Viewer Mode**, enter the Viewer password, and confirm editing controls are no longer available.
 
-## Local-storage limitations
+## Data storage
 
-Structured project data and uploaded image Blobs are saved in IndexedDB under the current browser profile. They are not shared with another browser, profile, user account, or computer. Clearing site data can permanently remove the project. Use the JSON export regularly; it contains the structured data and uploaded images for restoration.
+Structured project data is stored in Supabase Database and uploaded images are stored in the private `lookbook-images` bucket. Existing IndexedDB data is used only to initialize an empty Supabase project on the first successful Editor login.
 
-The source code is versioned on GitHub. The Supabase client and locked-down database/storage schema are prepared, but IndexedDB remains the active data source until secure Viewer/Editor authentication and the migration flow are completed. See `supabase/README.md` for setup details.
+The source code is versioned on GitHub. Supabase Auth verifies Viewer and Editor passwords, Row Level Security enforces their permissions, and Supabase Database and Storage house the shared text and images. See `supabase/README.md` for setup details.

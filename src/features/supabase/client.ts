@@ -16,7 +16,8 @@ export function getSupabaseClient() {
     auth: {
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      persistSession: true,
+      // Never restore an Editor session after a browser reload.
+      persistSession: false,
     },
   })
 
