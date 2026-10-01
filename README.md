@@ -43,4 +43,4 @@ These checks happen in the browser and are intentionally isolated in `src/featur
 
 Structured project data and uploaded image Blobs are saved in IndexedDB under the current browser profile. They are not shared with another browser, profile, user account, or computer. Clearing site data can permanently remove the project. Use the JSON export regularly; it contains the structured data and uploaded images for restoration.
 
-The source code is versioned on GitHub. Supabase, cloud storage, external authentication, and hosting are not connected yet.
+The source code is versioned on GitHub. The Supabase client and locked-down database/storage schema are prepared, but IndexedDB remains the active data source until secure Viewer/Editor authentication and the migration flow are completed. See `supabase/README.md` for setup details.
