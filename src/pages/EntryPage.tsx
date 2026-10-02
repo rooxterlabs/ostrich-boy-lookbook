@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DeleteConfirmation } from '../components/DeleteConfirmation'
 import { EditorToolbar } from '../components/EditorToolbar'
 import { EntryItemGroups } from '../components/EntryItemGroups'
 import { EntrySceneList } from '../components/EntrySceneList'
-import { ImageGallery, type GalleryUpload } from '../components/ImageGallery'
+import { ImageGallery, type GalleryUpload, type ImageGalleryHandle } from '../components/ImageGallery'
 import { normalizeEntry } from '../models/entry'
 import type { Category, LookbookEntry, Role, Scene, StoredImage } from '../models/lookbook'
 
@@ -29,25 +29,78 @@ export function EntryPage(props: EntryPageProps) {
   const [deleting, setDeleting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  useEffect(() => { setDraft(normalizeEntry(entry, folder, scenes)); setError(''); setEditing(role === 'editor') }, [entry, folder, scenes, role])
+  const galleryRef = useRef<ImageGalleryHandle>(null)
+
+  // Snapshot of the clean entry state — used to detect dirty
+  const [clean, setClean] = useState(() => normalizeEntry(entry, folder, scenes))
+
+  useEffect(() => {
+    const normalized = normalizeEntry(entry, folder, scenes)
+    setDraft(normalized)
+    setClean(normalized)
+    setError('')
+    setEditing(role === 'editor')
+  }, [entry, folder, scenes, role])
+
   const canEdit = editing && role === 'editor'
+
+  // ── Dirty detection ───────────────────────────────────────────────────────
+  const dirty = (() => {
+    if (draft.title !== clean.title) return true
+    if (draft.subtext !== clean.subtext) return true
+    if (draft.description !== clean.description) return true
+    // Item groups
+    if (draft.itemGroups.length !== clean.itemGroups.length) return true
+    for (let g = 0; g < draft.itemGroups.length; g++) {
+      const dg = draft.itemGroups[g]
+      const cg = clean.itemGroups[g]
+      if (dg.name !== cg.name) return true
+      if (dg.bullets.length !== cg.bullets.length) return true
+      for (let b = 0; b < dg.bullets.length; b++) {
+        if (dg.bullets[b].text !== cg.bullets[b].text) return true
+      }
+    }
+    // Scene list
+    if (draft.sceneList.length !== clean.sceneList.length) return true
+    for (let s = 0; s < draft.sceneList.length; s++) {
+      const ds = draft.sceneList[s]
+      const cs = clean.sceneList[s]
+      if (ds.number !== cs.number || ds.title !== cs.title || ds.location !== cs.location || ds.description !== cs.description || ds.mood !== cs.mood || ds.symbolism !== cs.symbolism || ds.conflict !== cs.conflict || ds.emotion !== cs.emotion) return true
+    }
+    return false
+  })()
+
   const update = <K extends keyof typeof draft>(key: K, value: typeof draft[K]) => setDraft((current) => ({ ...current, [key]: value }))
+
   const save = async () => {
     if (!draft.title.trim()) { setError('Enter a name for this entry.'); return }
     if (draft.itemGroups.some((group) => !group.name.trim())) { setError('Enter a name for each item category.'); return }
     setError(''); setBusy(true)
     try {
+      if (!await galleryRef.current?.savePending()) return
       await props.onSave({ ...draft, title: draft.title.trim(), role: draft.subtext, age: '', items: draft.itemGroups.flatMap((group) => group.bullets.map((bullet) => ({ id: bullet.id, name: bullet.text, category: group.name, notes: '' }))), updatedAt: new Date().toISOString() })
+      // After successful save, update clean snapshot so button goes grey
+      setClean(draft)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to save. Your changes are still here.') }
     finally { setBusy(false) }
   }
-  const startEditing = () => { setDraft(normalizeEntry(entry, folder, scenes)); setError(''); setEditing(true) }
-  const cancelEditing = () => { setDraft(normalizeEntry(entry, folder, scenes)); setEditing(role === 'editor'); setError('') }
+
+  const startEditing = () => { setDraft(normalizeEntry(entry, folder, scenes)); setClean(normalizeEntry(entry, folder, scenes)); setError(''); setEditing(true) }
+
+  const cancelEditing = () => {
+    // Revert draft to the last saved/clean state
+    const normalized = normalizeEntry(entry, folder, scenes)
+    setDraft(normalized)
+    setClean(normalized)
+    setEditing(role === 'editor')
+    setError('')
+  }
+
   return <main className={`page-shell entry-page ${canEdit ? 'is-editing' : ''}`}>
-    <ImageGallery images={images} primaryId={entry.primaryImageId} canEdit={role === 'editor'} onUpload={props.onUpload} onUpdate={props.onImageUpdate} onDelete={props.onImageDelete} onPrimary={props.onPrimary} onReorder={props.onImageReorder} />
-    {canEdit && <div className="entry-gallery-actions"><EditorToolbar name={entry.title} editing busy={busy} onEdit={startEditing} onSave={() => void save()} onCancel={cancelEditing} /></div>}
-    <div className="entry-title-row"><div>{canEdit ? <><label className="field">Name<input value={draft.title} disabled={busy} onChange={(event) => update('title', event.target.value)} /></label><label className="field">Subtext<input placeholder={'e.g. Jim’s Right-Hand Man · 30’s'} value={draft.subtext} disabled={busy} onChange={(event) => update('subtext', event.target.value)} /></label></> : <><h1>{entry.title}</h1>{draft.subtext && <p className="entry-role">{draft.subtext}</p>}</>}</div>
-      {role === 'editor' && !canEdit && <EditorToolbar name={entry.title} editing={false} busy={busy} onEdit={startEditing} onSave={() => void save()} onCancel={cancelEditing} />}
+    <ImageGallery ref={galleryRef} images={images} primaryId={entry.primaryImageId} canEdit={role === 'editor'} onUpload={props.onUpload} onUpdate={props.onImageUpdate} onDelete={props.onImageDelete} onPrimary={props.onPrimary} onReorder={props.onImageReorder} />
+    {canEdit && <div className="entry-gallery-actions"><EditorToolbar name={entry.title} editing busy={busy} dirty={dirty} onEdit={startEditing} onSave={() => void save()} onCancel={cancelEditing} /></div>}
+    <div className="entry-title-row"><div>{canEdit ? <><label className="field">Name<input value={draft.title} disabled={busy} onChange={(event) => update('title', event.target.value)} /></label><label className="field">Subtext<input placeholder={`e.g. Jim\u2019s Right-Hand Man \u00b7 30\u2019s`} value={draft.subtext} disabled={busy} onChange={(event) => update('subtext', event.target.value)} /></label></> : <><h1>{entry.title}</h1>{draft.subtext && <p className="entry-role">{draft.subtext}</p>}</>}</div>
+      {role === 'editor' && !canEdit && <EditorToolbar name={entry.title} editing={false} busy={busy} dirty={dirty} onEdit={startEditing} onSave={() => void save()} onCancel={cancelEditing} />}
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}
     {canEdit ? <label className="field entry-description-field">Description<textarea rows={5} disabled={busy} value={draft.description} onChange={(event) => update('description', event.target.value)} /></label> : draft.description ? <p className="lead-copy entry-description-copy preserve-lines">{draft.description}</p> : <p className="muted entry-description-copy">No description has been added.</p>}
@@ -56,6 +109,6 @@ export function EntryPage(props: EntryPageProps) {
       <EntrySceneList scenes={draft.sceneList} editing={canEdit} onChange={(next) => update('sceneList', next)} />
     </fieldset>
     {role === 'editor' && <div className="entry-delete"><button className="button danger-button" disabled={busy} onClick={() => setDeleting(true)}>Delete {entry.title}</button></div>}
-    {deleting && <DeleteConfirmation question={`Delete entry “${entry.title}” and all its images?`} doubleConfirm onCancel={() => setDeleting(false)} onConfirm={props.onDelete} />}
+    {deleting && <DeleteConfirmation question={`Delete entry "${entry.title}" and all its images?`} doubleConfirm onCancel={() => setDeleting(false)} onConfirm={props.onDelete} />}
   </main>
 }

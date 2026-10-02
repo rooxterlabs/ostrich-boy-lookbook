@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import type { ImageFrameRatio, StoredImage } from '../models/lookbook'
 
 export interface GalleryUpload {
@@ -22,6 +22,10 @@ interface ImageGalleryProps {
   onReorder: (sourceId: string, targetId: string) => void
 }
 
+export interface ImageGalleryHandle {
+  savePending: () => Promise<boolean>
+}
+
 interface DraftImage extends StoredImage { pending: true; file: File }
 interface Transform { x: number; y: number; scale: number }
 interface Interaction extends Transform { id: string; type: 'move' | 'resize'; clientX: number; clientY: number; width: number; height: number }
@@ -31,7 +35,7 @@ const ratioFor = (image: StoredImage): ImageFrameRatio => image.frameRatio ?? 'v
 const storedTransform = (image: StoredImage): Transform => ({ x: clamp(image.positionX ?? 0, -50, 50), y: clamp(image.positionY ?? 0, -50, 50), scale: clamp(image.scale ?? 1, 1, 2.5) })
 const isPending = (image: StoredImage): image is DraftImage => 'pending' in image && image.pending === true
 
-export function ImageGallery({ images, primaryId, canEdit, onUpload, onUpdate, onDelete, onPrimary, onReorder }: ImageGalleryProps) {
+export const ImageGallery = forwardRef<ImageGalleryHandle, ImageGalleryProps>(function ImageGallery({ images, primaryId, canEdit, onUpload, onUpdate, onDelete, onPrimary, onReorder }, ref) {
   const [submissionRatio, setSubmissionRatio] = useState<ImageFrameRatio>('vertical')
   const [pendingImages, setPendingImages] = useState<DraftImage[]>([])
   const [pendingPrimaryId, setPendingPrimaryId] = useState<string>()
@@ -122,7 +126,8 @@ export function ImageGallery({ images, primaryId, canEdit, onUpload, onUpdate, o
     setGalleryError('')
   }
   const saveGallery = async () => {
-    if (!pendingImages.length || savingGallery) return
+    if (!pendingImages.length) return true
+    if (savingGallery) return false
     setSavingGallery(true)
     setGalleryError('')
     try {
@@ -131,12 +136,15 @@ export function ImageGallery({ images, primaryId, canEdit, onUpload, onUpdate, o
       setPendingPrimaryId(undefined)
       setLiveTransforms({})
       liveTransformsRef.current = {}
+      return true
     } catch (reason) {
       setGalleryError(reason instanceof Error ? reason.message : 'Unable to save the gallery. Your uploads are still here.')
+      return false
     } finally {
       setSavingGallery(false)
     }
   }
+  useImperativeHandle(ref, () => ({ savePending: saveGallery }))
   const removeImage = (image: StoredImage) => {
     if (isPending(image)) {
       setPendingImages((current) => current.filter((candidate) => candidate.id !== image.id))
@@ -160,7 +168,10 @@ export function ImageGallery({ images, primaryId, canEdit, onUpload, onUpdate, o
 
   return <section className={`gallery ${canEdit ? 'is-editable' : ''}`} aria-label="Image gallery">
     <div className="gallery-pages">
-      {groups.map((group, groupIndex) => <div className={`gallery-frame-group gallery-frame-group-${group.ratio} ${group.images.length === 1 ? 'is-single' : ''}`} key={`${group.ratio}-${groupIndex}`}>
+      {groups.map((group, groupIndex) => {
+        const centeredSingle = group.images.length === 1 && !isPending(group.images[0])
+        const showInlineEmptyFrame = canEdit && group.ratio === 'vertical' && group.images.length % 2 === 1 && !centeredSingle
+        return <div className={`gallery-frame-group gallery-frame-group-${group.ratio} ${centeredSingle ? 'is-single' : ''}`} key={`${group.ratio}-${groupIndex}`}>
         {group.images.map((image) => {
           const pending = isPending(image)
           const index = pending ? pendingImages.findIndex((candidate) => candidate.id === image.id) : images.findIndex((candidate) => candidate.id === image.id)
@@ -183,8 +194,8 @@ export function ImageGallery({ images, primaryId, canEdit, onUpload, onUpdate, o
             {canEdit ? <textarea className="gallery-caption-input" rows={1} aria-label={`Description for ${image.name}`} placeholder="Add a description..." defaultValue={image.caption} onBlur={(event) => event.target.value !== image.caption && commitImage({ ...image, caption: event.target.value })} /> : image.caption && <p className="gallery-caption-text">{image.caption}</p>}
           </article>
         })}
-        {canEdit && group.ratio === 'vertical' && group.images.length % 2 === 1 && <label className="gallery-empty-frame gallery-frame-vertical gallery-inline-empty-frame" aria-label="Add vertical image beside the unpaired frame"><span aria-hidden="true">+</span><input hidden type="file" accept="image/*" onChange={(event) => { setSubmissionRatio('vertical'); stageUpload(event.target.files, 'vertical'); event.currentTarget.value = '' }} /></label>}
-      </div>)}
+        {showInlineEmptyFrame && <label className="gallery-empty-frame gallery-frame-vertical gallery-inline-empty-frame" aria-label="Add vertical image beside the unpaired frame"><span aria-hidden="true">+</span><input hidden type="file" accept="image/*" onChange={(event) => { setSubmissionRatio('vertical'); stageUpload(event.target.files, 'vertical'); event.currentTarget.value = '' }} /></label>}
+      </div>})}
     </div>
     {canEdit && <section className={`gallery-submission gallery-submission-${submissionRatio}`} aria-label={`${submissionRatio} image submission`}>
       <div className="gallery-submission-picker">
@@ -195,4 +206,4 @@ export function ImageGallery({ images, primaryId, canEdit, onUpload, onUpdate, o
       {galleryError && <p className="form-error" role="alert">{galleryError}</p>}
     </section>}
   </section>
-}
+})
