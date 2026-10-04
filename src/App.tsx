@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ListEditorDialog, type ListSavePayload } from './components/ListEditorDialog'
-import type { GalleryUpload } from './components/ImageGallery'
+import type { GalleryChanges } from './components/ImageGallery'
 import { Header } from './components/Header'
 import { LookbookNavigation } from './components/LookbookNavigation'
 import { ModeSwitchDialog } from './components/ModeSwitchDialog'
@@ -16,6 +16,9 @@ import { MasterItemListPage } from './pages/MasterItemListPage'
 import { MasterSceneListPage } from './pages/MasterSceneListPage'
 
 type Route = { page: 'items' | 'scenes' | 'folders' } | { page: 'folder'; id: string } | { page: 'entry'; id: string }
+
+// Update this label when releasing a new lookbook version.
+const APP_VERSION = 'v01.04'
 
 const DEFAULT_ENTRY_ID = ''
 const DEFAULT_CATEGORY_ID = ''
@@ -80,7 +83,7 @@ export default function App() {
   const batchSaveList = async (payload: ListSavePayload) => {
     if (role !== 'editor' || !editing) return
     let next = structuredClone(project)
-    let allRemovedEntries: string[] = []
+    const allRemovedEntries: string[] = []
 
     // 1. Deletes
     for (const id of payload.deletedIds) {
@@ -172,8 +175,8 @@ export default function App() {
       const updateEntry = async (next: LookbookEntry) => {
         const currentProject = projectRef.current ?? project
         const stamped = { ...currentProject, entries: currentProject.entries.map((candidate) => candidate.id === next.id ? next : candidate), updatedAt: new Date().toISOString() }
-        projectRef.current = stamped
         await saveProject(stamped)
+        projectRef.current = stamped
         setProject(stamped)
       }
       const deleteEntry = async () => {
@@ -187,8 +190,17 @@ export default function App() {
         await refreshImages()
         setRoute(entryFolder ? { page: 'folder', id: entryFolder.id } : { page: 'entry', id: '' })
       }
-      const currentEntry = () => (projectRef.current ?? project).entries.find((candidate) => candidate.id === entry.id) ?? entry
-      return <EntryPage key={entry.id} entry={entry} folder={entryFolder} scenes={visibleScenes} images={entryImages} role={role} onSave={(next) => { const latest = currentEntry(); return updateEntry({ ...next, imageIds: latest.imageIds, primaryImageId: latest.primaryImageId }) }} onDelete={deleteEntry} onUpload={async (uploads: GalleryUpload[]) => { const latest = currentEntry(); const added = await Promise.all(uploads.map(async (upload, index) => { const image: StoredImage = { id: crypto.randomUUID(), entryId: entry.id, name: upload.file.name, caption: upload.caption, order: entryImages.length + index, blob: upload.file, frameRatio: upload.frameRatio, positionX: upload.positionX, positionY: upload.positionY, scale: upload.scale }; await putImage(image); return image })); const requestedPrimaryIndex = uploads.findIndex((upload) => upload.makePrimary); const requestedPrimary = requestedPrimaryIndex >= 0 ? added[requestedPrimaryIndex]?.id : undefined; const next = { ...latest, imageIds: [...latest.imageIds, ...added.map((image) => image.id)], primaryImageId: requestedPrimary ?? latest.primaryImageId ?? added[0]?.id }; await updateEntry(next); await refreshImages() }} onImageUpdate={async (image) => { await putImage(image); await refreshImages() }} onImageDelete={async (image) => { const latest = currentEntry(); await deleteImage(image.id); await updateEntry({ ...latest, imageIds: latest.imageIds.filter((id) => id !== image.id), primaryImageId: latest.primaryImageId === image.id ? entryImages.find((candidate) => candidate.id !== image.id)?.id : latest.primaryImageId }); await refreshImages() }} onPrimary={(id) => updateEntry({ ...currentEntry(), primaryImageId: id })} onImageReorder={async (sourceId, targetId) => { const reordered = [...entryImages]; const sourceIndex = reordered.findIndex((image) => image.id === sourceId); const targetIndex = reordered.findIndex((image) => image.id === targetId); if (sourceIndex < 0 || targetIndex < 0) return; const [moved] = reordered.splice(sourceIndex, 1); reordered.splice(targetIndex, 0, moved); await Promise.all(reordered.map((image, order) => putImage({ ...image, order }))); await refreshImages() }} />
+      const saveEntry = async (next: LookbookEntry, gallery: GalleryChanges) => {
+        // Keep draft image IDs stable so a failed save can be retried without duplicating uploads.
+        const ordered = gallery.images.map((image, order) => ({ ...image, entryId: entry.id, order }))
+        for (const image of ordered) {
+          if (gallery.upserts.some((changed) => changed.id === image.id) || image.order !== gallery.images.find((candidate) => candidate.id === image.id)?.order) await putImage(image)
+        }
+        for (const id of gallery.deletedIds) await deleteImage(id)
+        await updateEntry({ ...next, imageIds: ordered.map((image) => image.id), primaryImageId: ordered.some((image) => image.id === next.primaryImageId) ? next.primaryImageId : ordered[0]?.id })
+        setImages((current) => [...current.filter((image) => image.entryId !== entry.id), ...ordered])
+      }
+      return <EntryPage key={entry.id} entry={entry} folder={entryFolder} scenes={visibleScenes} images={entryImages} role={role} onSave={saveEntry} onDelete={deleteEntry} />
     }
     if (route.page === 'items') return <MasterItemListPage entries={visibleEntries} onHome={home} onEntry={(id) => setRoute({ page: 'entry', id })} />
     if (route.page === 'scenes') return <MasterSceneListPage scenes={visibleScenes} entries={visibleEntries} role={role} onHome={home} onChange={(scenes) => void persist({ ...project, scenes })} />
@@ -196,5 +208,5 @@ export default function App() {
     return <main className="page-shell"><div className="empty-state"><h1>{visibleCategories.length ? 'Select a category' : 'Your lookbook is empty.'}</h1><p>{role === 'editor' ? 'Use EDIT to add and manage your categories and entries.' : 'New material will appear here when it is added.'}</p></div></main>
   })()
 
-  return <div className="app-shell"><Header role={role} onHome={home} onSwitchMode={() => setSwitchingTo(role === 'editor' ? 'viewer' : 'editor')} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>OSTRICH BOY</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}{switchingTo && <ModeSwitchDialog mode={switchingTo === 'editor' ? 'Editor' : 'Viewer'} onCancel={() => setSwitchingTo(undefined)} onSubmit={async (password) => { const accepted = switchingTo === 'editor' ? await authenticateEditor(password) : await authenticateViewer(password); if (!accepted) return false; if (switchingTo === 'viewer' && !canViewerAccessCurrentRoute) home(); setRole(switchingTo); setSwitchingTo(undefined); return true }} />}</div>
+  return <div className="app-shell"><Header role={role} onHome={home} onSwitchMode={() => setSwitchingTo(role === 'editor' ? 'viewer' : 'editor')} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>{APP_VERSION}</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}{switchingTo && <ModeSwitchDialog mode={switchingTo === 'editor' ? 'Editor' : 'Viewer'} onCancel={() => setSwitchingTo(undefined)} onSubmit={async (password) => { const accepted = switchingTo === 'editor' ? await authenticateEditor(password) : await authenticateViewer(password); if (!accepted) return false; if (switchingTo === 'viewer' && !canViewerAccessCurrentRoute) home(); setRole(switchingTo); setSwitchingTo(undefined); return true }} />}</div>
 }
