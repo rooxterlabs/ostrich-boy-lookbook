@@ -2,7 +2,6 @@ import type { ProjectData, StoredImage } from '../../models/lookbook'
 import { categoryEntryType, normalizeEntry } from '../../models/entry'
 import { seedProject } from '../../data/seed'
 import { getSupabaseClient } from '../supabase/client'
-import { getImages as getLocalImages, loadProject as loadLocalProject } from './database'
 
 const PROJECT_ID = seedProject.id
 const BUCKET = 'lookbook-images'
@@ -33,12 +32,6 @@ const normalizeProject = (project: ProjectData) => {
 
 const throwIfError = (message: string, error?: { message: string } | null) => {
   if (error) throw new Error(`${message} ${error.message}`)
-}
-
-const currentRole = async () => {
-  const { data, error } = await getSupabaseClient().from('lookbook_access_roles').select('role').maybeSingle()
-  throwIfError('Unable to verify Lookbook access.', error)
-  return data?.role as 'viewer' | 'editor' | undefined
 }
 
 const imagePath = (image: StoredImage) => {
@@ -73,13 +66,7 @@ export async function loadProject(): Promise<ProjectData> {
   throwIfError('Unable to load the Lookbook.', error)
   if (data?.document) return normalizeProject(data.document as ProjectData)
 
-  if (await currentRole() !== 'editor') return structuredClone(seedProject)
-
-  const localProject = await loadLocalProject()
-  const localImages = await getLocalImages()
-  await saveProject(localProject)
-  await Promise.all(localImages.map(uploadImage))
-  return normalizeProject(localProject)
+  return structuredClone(seedProject)
 }
 
 export async function saveProject(project: ProjectData) {

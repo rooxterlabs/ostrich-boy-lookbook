@@ -25,6 +25,11 @@ After creating the two Supabase Auth users, run
 and enables Row Level Security policies: Viewer can read; Editor can read and
 write. The app never stores either password in source or environment files.
 
-On the first successful Editor login, an empty remote project is initialized
-from the existing IndexedDB project and its images. Supabase becomes the active
-data source after authentication.
+For the direct-access lookbook, then run
+`migrations/20261006000000_allow_direct_lookbook_access.sql`. It retains those
+accounts and passwords but permits the anonymous application client to read and
+edit the shared lookbook without a password prompt.
+
+An empty remote project displays the local seed data until it is saved from
+direct Editor mode. Supabase becomes the active shared data source once that
+project exists.

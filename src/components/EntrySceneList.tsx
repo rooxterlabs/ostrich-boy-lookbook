@@ -19,7 +19,7 @@ export function EntrySceneList({ scenes, editing, onChange }: { scenes: EntrySce
         <div className="scene-facet-editors">{facets.map((facet) => <label key={facet}>{facet}<textarea rows={3} aria-label={`Scene ${index + 1} ${facet}`} value={scene[facet]} onChange={(event) => update(scene.id, { [facet]: event.target.value })} /></label>)}</div>
         <div className="list-editor-controls"><button className="button" aria-label={`Move scene ${index + 1} up`} disabled={index === 0} onClick={() => onChange(moveItem(scenes, index, -1))}>↑</button><button className="button" aria-label={`Move scene ${index + 1} down`} disabled={index === scenes.length - 1} onClick={() => onChange(moveItem(scenes, index, 1))}>↓</button><button className="button danger-button" onClick={() => setDeleting(scene)}>Delete scene</button></div>
       </> : <>
-        <div className="entry-scene-heading"><span className="entry-scene-number">SC. {scene.number || '—'}</span><h3>{scene.title || 'Untitled scene'}</h3></div>
+        <div className="entry-scene-heading"><span className="entry-scene-number">{scene.number || '—'}</span><h3>{scene.title || 'Untitled scene'}</h3></div>
         {scene.description && <p className="entry-scene-description preserve-lines">{scene.description}</p>}
         <dl className="scene-facets">{facets.map((facet) => <div key={facet}><dt>{facet}</dt><dd className="preserve-lines">{scene[facet] || '—'}</dd></div>)}</dl>
       </>}</div>

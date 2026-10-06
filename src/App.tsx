@@ -3,31 +3,27 @@ import { ListEditorDialog, type ListSavePayload } from './components/ListEditorD
 import type { GalleryChanges } from './components/ImageGallery'
 import { Header } from './components/Header'
 import { LookbookNavigation } from './components/LookbookNavigation'
-import { ModeSwitchDialog } from './components/ModeSwitchDialog'
-import { authenticateEditor, authenticateViewer, readSessionRole } from './features/auth/auth'
 import { deleteImage, getImages, loadProject, putImage, saveProject, saveProjectAndDeleteImages } from './features/storage/supabaseDatabase'
 import { categoryEntryType, newEntry } from './models/entry'
 import type { Category, LookbookEntry, ProjectData, Role, StoredImage } from './models/lookbook'
 import { EntryPage } from './pages/EntryPage'
 import { FolderManagerPage } from './pages/FolderManagerPage'
 import { FolderPage } from './pages/FolderPage'
-import { LoginPage } from './pages/LoginPage'
 import { MasterItemListPage } from './pages/MasterItemListPage'
 import { MasterSceneListPage } from './pages/MasterSceneListPage'
 
 type Route = { page: 'items' | 'scenes' | 'folders' } | { page: 'folder'; id: string } | { page: 'entry'; id: string }
 
 // Update this label when releasing a new lookbook version.
-const APP_VERSION = 'v01.06'
+const APP_VERSION = 'v01.07'
 
 const DEFAULT_ENTRY_ID = ''
 const DEFAULT_CATEGORY_ID = ''
 const RETIRED_SEED_CATEGORY_IDS = new Set(['category-props', 'category-costumes', 'category-hair-makeup', 'category-production-design', 'category-references'])
 
 export default function App() {
-  const [role, setRoleState] = useState<Role>(readSessionRole)
+  const [role, setRoleState] = useState<Role>('viewer')
   const [editing, setEditing] = useState<'category' | 'entry'>()
-  const [switchingTo, setSwitchingTo] = useState<'viewer' | 'editor'>()
   const [project, setProject] = useState<ProjectData>()
   const [images, setImages] = useState<StoredImage[]>([])
   const [route, setRoute] = useState<Route>({ page: 'entry', id: DEFAULT_ENTRY_ID })
@@ -60,7 +56,6 @@ export default function App() {
     setRoute(firstEntry ? { page: 'entry', id: firstEntry.id } : { page: 'folder', id: firstCategory.id })
   }, [role, route, visibleCategories, visibleEntries])
 
-  if (role === 'locked') return <LoginPage title="OSTRICH BOY — PRODUCTION LOOKBOOK" label="Viewer password" onSubmit={async (password) => { if (!await authenticateViewer(password)) return false; setRole('viewer'); return true }} />
   if (loading) return <main className="state-page"><div className="loading-mark" /><p>Loading lookbook…</p></main>
   if (!project) return <main className="state-page"><h1>Lookbook unavailable</h1><p>{error || 'Browser storage could not be opened.'}</p><button className="button" onClick={() => location.reload()}>Try again</button></main>
 
@@ -208,5 +203,5 @@ export default function App() {
     return <main className="page-shell"><div className="empty-state"><h1>{visibleCategories.length ? 'Select a category' : 'Your lookbook is empty.'}</h1><p>{role === 'editor' ? 'Use EDIT to add and manage your categories and entries.' : 'New material will appear here when it is added.'}</p></div></main>
   })()
 
-  return <div className="app-shell"><Header role={role} onHome={home} onSwitchMode={() => setSwitchingTo(role === 'editor' ? 'viewer' : 'editor')} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>{APP_VERSION}</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}{switchingTo && <ModeSwitchDialog mode={switchingTo === 'editor' ? 'Editor' : 'Viewer'} onCancel={() => setSwitchingTo(undefined)} onSubmit={async (password) => { const accepted = switchingTo === 'editor' ? await authenticateEditor(password) : await authenticateViewer(password); if (!accepted) return false; if (switchingTo === 'viewer' && !canViewerAccessCurrentRoute) home(); setRole(switchingTo); setSwitchingTo(undefined); return true }} />}</div>
+  return <div className="app-shell"><Header role={role} onHome={home} onSwitchMode={() => { const next = role === 'editor' ? 'viewer' : 'editor'; if (next === 'viewer' && !canViewerAccessCurrentRoute) home(); setRole(next) }} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>{APP_VERSION}</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}</div>
 }
