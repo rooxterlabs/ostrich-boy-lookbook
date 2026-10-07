@@ -13,9 +13,12 @@ export function getSupabaseClient() {
   }
 
   client ??= createClient(supabaseUrl, supabasePublishableKey, {
-    // Always use the publishable key as anon. Supplying this callback disables
-    // Supabase Auth entirely, including stored sessions and URL token detection.
-    accessToken: async () => null,
+    auth: {
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      // Viewer stays public; re-entering Editor after a reload needs a password.
+      persistSession: false,
+    },
   })
 
   return client

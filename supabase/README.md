@@ -20,23 +20,28 @@ Editor, or apply it with an authenticated Supabase CLI session. It creates:
 - `lookbook_images` for image metadata and editorial transforms;
 - the private `lookbook-images` Storage bucket.
 
-Then run `migrations/20261006010000_repair_anonymous_lookbook_access.sql` in the
-Lookbook project's SQL Editor. It can be safely re-run on an existing project;
-it changes privileges and policies without replacing any project or images.
+The original `20261001010000_add_viewer_editor_auth.sql` established the existing
+Editor account's role mapping. Do not reset that account or its password.
 
-The old `20261001010000_add_viewer_editor_auth.sql` is historical and is not
-required for direct access. Existing Auth accounts/role records can remain but
-are not consulted by the app. No accounts or passwords need to be created.
+For public Viewer access with protected editing, apply
+`migrations/20261006020000_restore_editor_password_access.sql` in the Lookbook
+project's SQL Editor. It is re-runnable, validates the existing Editor role,
+and changes privileges/policies without replacing content or images.
 
-The repair grants `anon` schema usage and `SELECT`, `INSERT`, `UPDATE`, `DELETE`
-on `lookbook_projects`, `lookbook_images`, and `storage.objects`. RLS stays
-enabled, with anonymous policies scoped to project `ostrich-boy` and bucket
-`lookbook-images`. Uploads with upsert require all of `SELECT`, `INSERT`, and
-`UPDATE`; image removal also requires `DELETE`. The bucket can stay private
-because its anonymous policy permits the app's existing download path.
+The latest migration supersedes the earlier direct-write access migrations.
+Do not re-run those migrations after restoring Editor protection.
 
-The app uses only the publishable key, with no user token or session. Viewer and
-Editor are UI modes; both use the same anonymous backend permissions.
+Anonymous access retains `SELECT` on the project and image metadata, with
+read-only RLS policies scoped to `ostrich-boy` and `lookbook-images`. Anonymous
+project/metadata write grants are revoked. Storage restrictive policies deny
+anonymous uploads, updates and deletion in this bucket without affecting other
+buckets. Authenticated writes require the existing `editor` role from
+`lookbook_access_roles`. Upload/upsert and delete permissions are included.
+
+Viewer opens without logging in. Edit uses the existing
+`editor@ostrich-boy.invalid` account through Supabase Auth. Returning to View
+signs out only the current session. Sessions are not stored, so reloads return
+to public Viewer mode and entering Editor again requires the password.
 
 **A GitHub/frontend deployment does not apply these SQL changes.** A live
 `42501: permission denied for table lookbook_projects` indicates that the
