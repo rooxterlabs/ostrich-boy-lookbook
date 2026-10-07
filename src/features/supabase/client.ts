@@ -13,12 +13,9 @@ export function getSupabaseClient() {
   }
 
   client ??= createClient(supabaseUrl, supabasePublishableKey, {
-    auth: {
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      // Never restore an Editor session after a browser reload.
-      persistSession: false,
-    },
+    // Always use the publishable key as anon. Supplying this callback disables
+    // Supabase Auth entirely, including stored sessions and URL token detection.
+    accessToken: async () => null,
   })
 
   return client

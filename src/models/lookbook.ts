@@ -1,5 +1,5 @@
 export type WorkflowStatus = 'draft' | 'submitted' | 'approved'
-export type Role = 'locked' | 'viewer' | 'editor'
+export type Role = 'viewer' | 'editor'
 export type EntryType = 'character' | 'location' | 'general'
 
 export interface Category {

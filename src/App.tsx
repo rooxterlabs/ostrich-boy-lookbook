@@ -15,7 +15,7 @@ import { MasterSceneListPage } from './pages/MasterSceneListPage'
 type Route = { page: 'items' | 'scenes' | 'folders' } | { page: 'folder'; id: string } | { page: 'entry'; id: string }
 
 // Update this label when releasing a new lookbook version.
-const APP_VERSION = 'v01.07'
+const APP_VERSION = 'v01.08'
 
 const DEFAULT_ENTRY_ID = ''
 const DEFAULT_CATEGORY_ID = ''
@@ -34,22 +34,21 @@ export default function App() {
   useEffect(() => { projectRef.current = project }, [project])
 
   const refreshImages = useCallback(async () => setImages(await getImages()), [])
-  useEffect(() => { if (role === 'locked') { setLoading(false); return } setLoading(true); loadProject().then(async (data) => [data, await getImages()] as const).then(([data, storedImages]) => { setProject(data); setImages(storedImages); setError('') }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load the lookbook.')).finally(() => setLoading(false)) }, [role])
+  useEffect(() => { loadProject().then(async (data) => [data, await getImages()] as const).then(([data, storedImages]) => { setProject(data); setImages(storedImages); setError('') }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load the lookbook.')).finally(() => setLoading(false)) }, [])
   useEffect(() => {
-    if (role === 'locked') return
     const channel = new BroadcastChannel('lookbook-changes')
     channel.onmessage = () => {
       loadProject().then(async (data) => { setProject(data); setImages(await getImages()) }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to refresh the lookbook.'))
     }
     return () => channel.close()
-  }, [role])
+  }, [])
   const setRole = (next: Role) => setRoleState(next)
   const persist = async (next: ProjectData) => { const stamped = { ...next, updatedAt: new Date().toISOString() }; setProject(stamped); try { await saveProject(stamped); setError('') } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to save changes.') } }
   const visibleCategories = useMemo(() => project ? project.categories.filter((category) => !RETIRED_SEED_CATEGORY_IDS.has(category.id) && !category.archived && (role === 'editor' || category.status === 'approved')).sort((a, b) => a.order - b.order) : [], [project, role])
   const visibleEntries = useMemo(() => project ? project.entries.filter((entry) => !entry.archived && (role === 'editor' || entry.status === 'approved')) : [], [project, role])
   const visibleScenes = useMemo(() => project ? project.scenes.filter((scene) => role === 'editor' || scene.status === 'approved') : [], [project, role])
   useEffect(() => {
-    if (role === 'locked' || route.page !== 'entry' || route.id) return
+    if (route.page !== 'entry' || route.id) return
     const firstCategory = visibleCategories.find((category) => !category.parentId) ?? visibleCategories[0]
     if (!firstCategory) return
     const firstEntry = visibleEntries.find((candidate) => candidate.categoryIds.includes(firstCategory.id))
@@ -71,6 +70,12 @@ export default function App() {
       : route.page === 'entry'
         ? project.entries.some((candidate) => candidate.id === route.id && candidate.status === 'approved' && !candidate.archived)
         : true
+  const switchMode = () => {
+    const next = role === 'editor' ? 'viewer' : 'editor'
+    setEditing(undefined)
+    if (next === 'viewer' && !canViewerAccessCurrentRoute) home()
+    setRole(next)
+  }
   const navigateCategory = (id: string) => {
     const firstEntry = visibleEntries.find((candidate) => candidate.categoryIds.includes(id))
     setRoute(firstEntry ? { page: 'entry', id: firstEntry.id } : { page: 'folder', id })
@@ -203,5 +208,5 @@ export default function App() {
     return <main className="page-shell"><div className="empty-state"><h1>{visibleCategories.length ? 'Select a category' : 'Your lookbook is empty.'}</h1><p>{role === 'editor' ? 'Use EDIT to add and manage your categories and entries.' : 'New material will appear here when it is added.'}</p></div></main>
   })()
 
-  return <div className="app-shell"><Header role={role} onHome={home} onSwitchMode={() => { const next = role === 'editor' ? 'viewer' : 'editor'; if (next === 'viewer' && !canViewerAccessCurrentRoute) home(); setRole(next) }} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>{APP_VERSION}</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}</div>
+  return <div className="app-shell"><Header role={role} onHome={home} onSwitchMode={switchMode} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>{APP_VERSION}</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}</div>
 }

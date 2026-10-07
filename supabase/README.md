@@ -20,15 +20,28 @@ Editor, or apply it with an authenticated Supabase CLI session. It creates:
 - `lookbook_images` for image metadata and editorial transforms;
 - the private `lookbook-images` Storage bucket.
 
-After creating the two Supabase Auth users, run
-`migrations/20261001010000_add_viewer_editor_auth.sql`. It assigns their roles
-and enables Row Level Security policies: Viewer can read; Editor can read and
-write. The app never stores either password in source or environment files.
+Then run `migrations/20261006010000_repair_anonymous_lookbook_access.sql` in the
+Lookbook project's SQL Editor. It can be safely re-run on an existing project;
+it changes privileges and policies without replacing any project or images.
 
-For the direct-access lookbook, then run
-`migrations/20261006000000_allow_direct_lookbook_access.sql`. It retains those
-accounts and passwords but permits the anonymous application client to read and
-edit the shared lookbook without a password prompt.
+The old `20261001010000_add_viewer_editor_auth.sql` is historical and is not
+required for direct access. Existing Auth accounts/role records can remain but
+are not consulted by the app. No accounts or passwords need to be created.
+
+The repair grants `anon` schema usage and `SELECT`, `INSERT`, `UPDATE`, `DELETE`
+on `lookbook_projects`, `lookbook_images`, and `storage.objects`. RLS stays
+enabled, with anonymous policies scoped to project `ostrich-boy` and bucket
+`lookbook-images`. Uploads with upsert require all of `SELECT`, `INSERT`, and
+`UPDATE`; image removal also requires `DELETE`. The bucket can stay private
+because its anonymous policy permits the app's existing download path.
+
+The app uses only the publishable key, with no user token or session. Viewer and
+Editor are UI modes; both use the same anonymous backend permissions.
+
+**A GitHub/frontend deployment does not apply these SQL changes.** A live
+`42501: permission denied for table lookbook_projects` indicates that the
+anonymous PostgreSQL role lacks table privileges. Fix the grants first, then
+check the RLS policies. The repair SQL ends with queries showing both.
 
 An empty remote project displays the local seed data until it is saved from
 direct Editor mode. Supabase becomes the active shared data source once that

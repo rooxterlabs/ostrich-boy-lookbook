@@ -13,9 +13,9 @@ export function Header({ role, onHome, onSwitchMode }: HeaderProps) {
         <strong>OSTRICH BOY</strong>
         <span>Production Lookbook</span>
       </button>
-      <nav className="header-actions" aria-label="Session actions">
+      <nav className="header-actions" aria-label="Lookbook modes">
         <button className="mode-switch-button" onClick={onSwitchMode}>
-          {role === 'editor' ? 'Viewer mode' : 'Edit mode'}
+          {role === 'editor' ? 'Back to View' : 'Edit'}
         </button>
       </nav>
     </header>
