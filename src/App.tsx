@@ -14,11 +14,12 @@ import { FolderManagerPage } from './pages/FolderManagerPage'
 import { FolderPage } from './pages/FolderPage'
 import { MasterItemListPage } from './pages/MasterItemListPage'
 import { MasterSceneListPage } from './pages/MasterSceneListPage'
+import { MovieInfoPage } from './pages/MovieInfoPage'
 
-type Route = { page: 'items' | 'scenes' | 'folders' } | { page: 'folder'; id: string } | { page: 'entry'; id: string }
+type Route = { page: 'items' | 'scenes' | 'folders' | 'movie-info' } | { page: 'folder'; id: string } | { page: 'entry'; id: string }
 
 // Update this label when releasing a new lookbook version.
-const APP_VERSION = 'v01.11'
+const APP_VERSION = 'v01.12'
 
 const DEFAULT_ENTRY_ID = ''
 const DEFAULT_CATEGORY_ID = ''
@@ -76,7 +77,7 @@ export default function App() {
   const entry = route.page === 'entry' ? visibleEntries.find((candidate) => candidate.id === route.id) : undefined
   const home = () => setRoute(visibleCategories[0] ? { page: 'folder', id: visibleCategories[0].id } : { page: 'entry', id: '' })
   const activeEntry = route.page === 'entry' ? visibleEntries.find((candidate) => candidate.id === route.id) : undefined
-  const activeCategoryId = route.page === 'folder' ? route.id : activeEntry?.categoryIds.find((id) => visibleCategories.some((category) => category.id === id)) ?? visibleCategories[0]?.id ?? DEFAULT_CATEGORY_ID
+  const activeCategoryId = route.page === 'movie-info' ? '' : route.page === 'folder' ? route.id : activeEntry?.categoryIds.find((id) => visibleCategories.some((category) => category.id === id)) ?? visibleCategories[0]?.id ?? DEFAULT_CATEGORY_ID
   const canViewerAccessCurrentRoute = route.page === 'folders'
     ? false
     : route.page === 'folder'
@@ -183,6 +184,7 @@ export default function App() {
     }
   }
   const content = (() => {
+    if (route.page === 'movie-info') return <MovieInfoPage />
     if (route.page === 'folder' && folder) return <FolderPage folder={folder} childFolders={visibleCategories.filter((category) => category.parentId === folder.id)} entries={visibleEntries.filter((candidate) => candidate.categoryIds.includes(folder.id))} images={images} role={role} onHome={home} onFolder={(id) => setRoute({ page: 'folder', id })} onEntry={(id) => setRoute({ page: 'entry', id })} onCreate={(title, type) => { const created = newEntry(title, folder, type); void persist({ ...project, entries: [...project.entries, created] }); setRoute({ page: 'entry', id: created.id }) }} />
     if (route.page === 'entry' && entry) {
       const entryFolder = visibleCategories.find((category) => entry.categoryIds.includes(category.id))
@@ -223,5 +225,5 @@ export default function App() {
     return <main className="page-shell"><div className="empty-state"><h1>{visibleCategories.length ? 'Select a category' : 'Your lookbook is empty.'}</h1><p>{role === 'editor' ? 'Use EDIT to add and manage your categories and entries.' : 'New material will appear here when it is added.'}</p></div></main>
   })()
 
-  return <div className="app-shell"><Header role={role} onHome={home} onSwitchMode={switchMode} switchingMode={switchingToView} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>{APP_VERSION}</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}{enteringEditor && <ModeSwitchDialog onCancel={() => setEnteringEditor(false)} onSubmit={async (password) => { if (!await authenticateEditor(password)) return false; setRole('editor'); setEnteringEditor(false); return true }} />}</div>
+  return <div className="app-shell"><Header role={role} onMovieInfo={() => setRoute({ page: 'movie-info' })} onHome={home} onSwitchMode={switchMode} switchingMode={switchingToView} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>{APP_VERSION}</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}{enteringEditor && <ModeSwitchDialog onCancel={() => setEnteringEditor(false)} onSubmit={async (password) => { if (!await authenticateEditor(password)) return false; setRole('editor'); setEnteringEditor(false); return true }} />}</div>
 }
