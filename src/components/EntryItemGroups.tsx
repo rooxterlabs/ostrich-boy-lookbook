@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ItemGroup } from '../models/lookbook'
 import { DeleteConfirmation } from './DeleteConfirmation'
 
@@ -6,14 +6,41 @@ export function EntryItemGroups({ groups, editing, onChange }: { groups: ItemGro
   const [deleting, setDeleting] = useState<{ question: string; remove: () => void }>()
   const [isOpen, setIsOpen] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+  const groupsRef = useRef<HTMLDivElement>(null)
   const updateGroup = (id: string, patch: Partial<ItemGroup>) => onChange(groups.map((group) => group.id === id ? { ...group, ...patch } : group))
   useEffect(() => { const content = contentRef.current as (HTMLDivElement & { inert: boolean }) | null; if (content) content.inert = !isOpen }, [isOpen])
+  useLayoutEffect(() => {
+    const container = groupsRef.current
+    if (!container) return
+    const categories = Array.from(container.children) as HTMLElement[]
+    const packCategories = () => {
+      const style = getComputedStyle(container)
+      const columnCount = parseInt(style.getPropertyValue('--item-group-columns'), 10)
+      const gap = parseFloat(style.getPropertyValue('--item-group-gap'))
+      const nextRows = Array<number>(columnCount).fill(1)
+      const heights = categories.map((category) => Math.ceil(category.getBoundingClientRect().height))
+      // Keep the DOM order and input focus while stacking 4 under 1, 5 under 2, etc.
+      categories.forEach((category, index) => {
+        const column = index % columnCount
+        const height = Math.max(1, heights[index])
+        category.style.gridColumn = String(column + 1)
+        category.style.gridRow = `${nextRows[column]} / span ${height}`
+        nextRows[column] += height + gap
+      })
+      container.classList.add('is-packed')
+    }
+    packCategories()
+    const observer = new ResizeObserver(packCategories)
+    observer.observe(container)
+    categories.forEach((category) => observer.observe(category))
+    return () => observer.disconnect()
+  }, [groups, editing])
   return <section className={`entry-section entry-list-section ${isOpen ? 'is-open' : ''}`} aria-labelledby="item-list-heading">
     <h2 className="entry-section-heading"><button id="item-list-heading" type="button" className="entry-section-toggle" aria-controls="item-list-content" aria-expanded={isOpen} onClick={() => setIsOpen((current) => !current)}>ITEM LIST</button></h2>
     <div ref={contentRef} id="item-list-content" className="entry-section-reveal" aria-hidden={!isOpen}>
       <div className="entry-section-reveal-content">
         {!groups.length && <p className="muted">No item categories yet.</p>}
-        <div className={`entry-item-groups ${editing ? 'is-editing' : ''}`}>{groups.map((group, index) => {
+        <div ref={groupsRef} className={`entry-item-groups ${editing ? 'is-editing' : ''}`}>{groups.map((group, index) => {
       const displayedBullets = editing && !group.bullets.length ? [{ id: `${group.id}-empty-item`, text: '' }] : group.bullets
       return <section className="entry-item-group" key={group.id} aria-label={group.name || 'Untitled item category'}>
       {editing ? <div className="group-editor-heading"><input aria-label={`Item category ${index + 1} name`} placeholder="Category name" value={group.name} onChange={(event) => updateGroup(group.id, { name: event.target.value })} /><button className="button danger-button" onClick={() => setDeleting({ question: `Delete item category “${group.name}” and all its bullet points?`, remove: () => onChange(groups.filter((candidate) => candidate.id !== group.id)) })}>Delete category</button></div> : <h3>{group.name}</h3>}

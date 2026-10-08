@@ -18,7 +18,7 @@ import { MasterSceneListPage } from './pages/MasterSceneListPage'
 type Route = { page: 'items' | 'scenes' | 'folders' } | { page: 'folder'; id: string } | { page: 'entry'; id: string }
 
 // Update this label when releasing a new lookbook version.
-const APP_VERSION = 'v01.10'
+const APP_VERSION = 'v01.11'
 
 const DEFAULT_ENTRY_ID = ''
 const DEFAULT_CATEGORY_ID = ''
