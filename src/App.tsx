@@ -19,7 +19,7 @@ import { MovieInfoPage } from './pages/MovieInfoPage'
 type Route = { page: 'items' | 'scenes' | 'folders' | 'movie-info' } | { page: 'folder'; id: string } | { page: 'entry'; id: string }
 
 // Update this label when releasing a new lookbook version.
-const APP_VERSION = 'v01.12'
+const APP_VERSION = 'v01.13'
 
 const DEFAULT_ENTRY_ID = ''
 const DEFAULT_CATEGORY_ID = ''

@@ -86,6 +86,7 @@ export interface StoredImage {
   caption: string
   order: number
   blob: Blob
+  storagePath?: string
   positionX?: number
   positionY?: number
   scale?: number

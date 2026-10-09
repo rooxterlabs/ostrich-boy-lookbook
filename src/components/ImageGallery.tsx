@@ -1,6 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import type { ImageFrameRatio, StoredImage } from '../models/lookbook'
 import { ImageModal } from './ImageModal'
+import { PhotoCropEditor } from './PhotoCropEditor'
+import { cropForImage, imageRatio as ratioFor, type ImageSize } from '../features/images/crop'
 
 export interface GalleryChanges {
   upserts: StoredImage[]
@@ -20,22 +22,19 @@ export interface ImageGalleryHandle {
   reset: () => void
 }
 
-interface Transform { x: number; y: number; scale: number }
-interface Interaction extends Transform { id: string; type: 'move' | 'resize'; clientX: number; clientY: number; width: number; height: number }
 interface PanSession { startX: number; startY: number; scroll: number; startTime: number; hasMoved: boolean; imageId: string }
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
-const ratioFor = (image: StoredImage): ImageFrameRatio => image.frameRatio ?? 'vertical'
-const storedTransform = (image: StoredImage): Transform => ({ x: clamp(image.positionX ?? 0, -50, 50), y: clamp(image.positionY ?? 0, -50, 50), scale: clamp(image.scale ?? 1, 1, 2.5) })
 
 function ImagePreview({ image }: { image: StoredImage }) {
   const [url, setUrl] = useState('')
+  const [size, setSize] = useState<ImageSize>()
   useEffect(() => {
     const next = URL.createObjectURL(image.blob)
+    setSize(undefined)
     setUrl(next)
     return () => URL.revokeObjectURL(next)
   }, [image.blob])
-  const transform = storedTransform(image)
-  return <img src={url || undefined} alt={image.caption || image.name} draggable={false} style={{ objectPosition: `calc(50% + ${transform.x}%) calc(50% + ${transform.y}%)`, transform: `scale(${transform.scale})` }} />
+  const crop = size ? cropForImage(image, size) : undefined
+  return <img src={url || undefined} alt={image.caption || image.name} draggable={false} onLoad={(event) => setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} style={crop ? { width: `${100 / crop.width}%`, height: `${100 / crop.height}%`, left: `${-crop.x / crop.width * 100}%`, top: `${-crop.y / crop.height * 100}%` } : undefined} />
 }
 
 export const ImageGallery = forwardRef<ImageGalleryHandle, ImageGalleryProps>(function ImageGallery({ images, canEdit, busy = false, onDirtyChange }, ref) {
@@ -44,18 +43,24 @@ export const ImageGallery = forwardRef<ImageGalleryHandle, ImageGalleryProps>(fu
   const [edits, setEdits] = useState<Record<string, StoredImage>>({})
   const [deletedIds, setDeletedIds] = useState<string[]>([])
   const [activeId, setActiveId] = useState<string>()
+  const [cropId, setCropId] = useState<string>()
+  const [replacementError, setReplacementError] = useState('')
   const [deletePending, setDeletePending] = useState<string>()
   const [enlargedImageId, setEnlargedImageId] = useState<string>()
   const [edges, setEdges] = useState({ left: false, right: false })
   const viewport = useRef<HTMLDivElement>(null)
   const uploadInput = useRef<HTMLInputElement>(null)
-  const interaction = useRef<Interaction>()
+  const replaceInput = useRef<HTMLInputElement>(null)
+  const replacementId = useRef<string>()
+  const replacementVersion = useRef(0)
   const pan = useRef<PanSession>()
   const previousSubmission = useRef({ count: 0, ratio: submissionRatio })
-  const transformRef = useRef<Transform>({ x: 0, y: 0, scale: 1 })
   const displayImages = useMemo(() => [...images, ...additions].filter((image) => !deletedIds.includes(image.id)).map((image) => edits[image.id] ?? image), [images, additions, edits, deletedIds])
+  const liveImages = useRef(displayImages)
+  liveImages.current = displayImages
   const enlargedIndex = useMemo(() => displayImages.findIndex((image) => image.id === enlargedImageId), [displayImages, enlargedImageId])
   const enlargedImage = enlargedIndex >= 0 ? displayImages[enlargedIndex] : undefined
+  const cropImage = displayImages.find((image) => image.id === cropId)
   const hasPrev = enlargedIndex > 0
   const hasNext = enlargedIndex >= 0 && enlargedIndex < displayImages.length - 1
   const dirty = additions.length > 0 || Object.keys(edits).length > 0 || deletedIds.length > 0
@@ -63,7 +68,9 @@ export const ImageGallery = forwardRef<ImageGalleryHandle, ImageGalleryProps>(fu
 
   const reset = () => {
     setAdditions([]); setEdits({}); setDeletedIds([])
-    setSubmissionRatio('vertical'); setActiveId(undefined); setDeletePending(undefined); setEnlargedImageId(undefined)
+    setSubmissionRatio('vertical'); setActiveId(undefined); setCropId(undefined); setReplacementError(''); setDeletePending(undefined); setEnlargedImageId(undefined)
+    replacementId.current = undefined
+    replacementVersion.current += 1
   }
   useImperativeHandle(ref, () => ({
     getChanges: () => ({ images: displayImages, deletedIds, upserts: displayImages.filter((image) => additions.some((addition) => addition.id === image.id) || !!edits[image.id]) }),
@@ -97,7 +104,7 @@ export const ImageGallery = forwardRef<ImageGalleryHandle, ImageGalleryProps>(fu
 
   const commitImage = (image: StoredImage) => {
     const original = [...images, ...additions].find((candidate) => candidate.id === image.id)
-    const same = original && image.caption === original.caption && image.positionX === original.positionX && image.positionY === original.positionY && image.scale === original.scale
+    const same = original && image.blob === original.blob && image.name === original.name && ratioFor(image) === ratioFor(original) && image.caption === original.caption && Math.abs((image.positionX ?? 0) - (original.positionX ?? 0)) < .000001 && Math.abs((image.positionY ?? 0) - (original.positionY ?? 0)) < .000001 && Math.abs((image.scale ?? 1) - (original.scale ?? 1)) < .000001
     setEdits((current) => {
       const next = { ...current }
       if (same) delete next[image.id]
@@ -105,27 +112,6 @@ export const ImageGallery = forwardRef<ImageGalleryHandle, ImageGalleryProps>(fu
       return next
     })
   }
-  const beginInteraction = (event: React.PointerEvent, type: Interaction['type'], image: StoredImage) => {
-    if (!canEdit || busy) return
-    event.preventDefault(); event.stopPropagation()
-    event.currentTarget.setPointerCapture(event.pointerId)
-    const frame = event.currentTarget.closest('.gallery-frame')!.getBoundingClientRect()
-    const start = storedTransform(image)
-    transformRef.current = start
-    interaction.current = { id: image.id, type, clientX: event.clientX, clientY: event.clientY, width: frame.width, height: frame.height, ...start }
-  }
-  const updateInteraction = (event: React.PointerEvent) => {
-    const current = interaction.current
-    if (!current) return
-    const dx = event.clientX - current.clientX, dy = event.clientY - current.clientY
-    const next = current.type === 'move'
-      ? { ...transformRef.current, x: clamp(current.x + dx / current.width * 100, -50, 50), y: clamp(current.y + dy / current.height * 100, -50, 50) }
-      : { ...transformRef.current, scale: clamp(current.scale + (dx + dy) / 320, 1, 2.5) }
-    transformRef.current = next
-    const image = displayImages.find((candidate) => candidate.id === current.id)
-    if (image) commitImage({ ...image, positionX: next.x, positionY: next.y, scale: next.scale })
-  }
-  const endInteraction = () => { interaction.current = undefined }
   const beginPan = (event: React.PointerEvent, image: StoredImage) => {
     if (event.button !== 0) return
     event.preventDefault()
@@ -176,12 +162,35 @@ export const ImageGallery = forwardRef<ImageGalleryHandle, ImageGalleryProps>(fu
     setAdditions((current) => [...current, ...next])
     setSubmissionRatio('vertical')
   }
+  const replacePhoto = async (file?: File) => {
+    const id = replacementId.current
+    const image = displayImages.find((candidate) => candidate.id === id)
+    if (!file || !image || busy) return
+    const version = ++replacementVersion.current
+    setReplacementError('')
+    const url = URL.createObjectURL(file)
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const probe = new Image()
+        probe.onload = () => resolve()
+        probe.onerror = () => reject(new Error('Choose a valid image to replace this photo.'))
+        probe.src = url
+      })
+      const current = liveImages.current.find((candidate) => candidate.id === id)
+      if (!current || replacementId.current !== id || replacementVersion.current !== version) return
+      commitImage({ ...current, blob: file, name: file.name, positionX: 0, positionY: 0, scale: 1 })
+    } catch (reason) {
+      if (replacementVersion.current === version && replacementId.current === id) setReplacementError(reason instanceof Error ? reason.message : 'Unable to open this photo.')
+    } finally { URL.revokeObjectURL(url) }
+  }
   const removeImage = (image: StoredImage) => {
     if (additions.some((candidate) => candidate.id === image.id)) setAdditions((current) => current.filter((candidate) => candidate.id !== image.id))
     else setDeletedIds((current) => [...current, image.id])
     setEdits((current) => { const next = { ...current }; delete next[image.id]; return next })
     setDeletePending(undefined)
     if (activeId === image.id) setActiveId(undefined)
+    if (cropId === image.id) setCropId(undefined)
+    if (replacementId.current === image.id) replacementId.current = undefined
     if (enlargedImageId === image.id) setEnlargedImageId(undefined)
   }
 
@@ -194,43 +203,34 @@ export const ImageGallery = forwardRef<ImageGalleryHandle, ImageGalleryProps>(fu
           if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); scroll(event.key === 'ArrowLeft' ? -1 : 1) }
         }}>
           <div className="gallery-track">
-            {displayImages.map((image) => <article className={`gallery-frame-card gallery-card-${ratioFor(image)} ${activeId === image.id ? 'is-active' : ''}`} key={image.id}>
+            {displayImages.map((image) => <article className={`gallery-frame-card gallery-card-${ratioFor(image)} ${activeId === image.id ? 'is-active' : ''}`} key={image.id} data-image-id={image.id}>
               <div className={`gallery-frame gallery-frame-${ratioFor(image)}`}>
                 <ImagePreview image={image} />
                 <button
                   className="gallery-move-surface"
-                  aria-label={activeId === image.id ? `Reframe ${image.name}` : `Enlarge ${image.caption || image.name}, or drag to scroll`}
+                  aria-label={`Enlarge ${image.caption || image.name}, or drag to scroll`}
                   disabled={busy}
-                  onPointerDown={(event) => activeId === image.id ? beginInteraction(event, 'move', image) : beginPan(event, image)}
-                  onPointerMove={(event) => activeId === image.id ? updateInteraction(event) : movePan(event)}
-                  onPointerUp={(event) => {
-                    if (activeId === image.id) {
-                      endInteraction()
-                    } else {
-                      endPan(event, image)
-                    }
-                  }}
-                  onPointerCancel={() => {
-                    endInteraction()
-                    pan.current = undefined
-                  }}
+                  onPointerDown={(event) => beginPan(event, image)}
+                  onPointerMove={movePan}
+                  onPointerUp={(event) => endPan(event, image)}
+                  onPointerCancel={() => { pan.current = undefined }}
                   onKeyDown={(event) => {
-                    if (activeId === image.id) {
-                      if (!event.key.startsWith('Arrow')) return
-                      event.preventDefault()
-                      const t = storedTransform(image)
-                      commitImage({ ...image, positionX: clamp(t.x + (event.key === 'ArrowRight' ? 2 : event.key === 'ArrowLeft' ? -2 : 0), -50, 50), positionY: clamp(t.y + (event.key === 'ArrowDown' ? 2 : event.key === 'ArrowUp' ? -2 : 0), -50, 50) })
-                    } else if (event.key === 'Enter' || event.key === ' ') {
+                    if (activeId !== image.id && (event.key === 'Enter' || event.key === ' ')) {
                       event.preventDefault()
                       setEnlargedImageId(image.id)
                     }
                   }}
                 />
                 {canEdit && <>
-                  <button className="gallery-reframe" disabled={busy} aria-pressed={activeId === image.id} onClick={() => setActiveId(activeId === image.id ? undefined : image.id)}>{activeId === image.id ? 'Done' : 'Reframe'}</button>
+                  {activeId === image.id ? <>
+                    <button className="gallery-crop" disabled={busy} aria-label={`Crop ${image.name}`} title="Crop photo" onClick={() => setCropId(image.id)}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3v15h15M3 6h15v15M9 6h9v9" /></svg></button>
+                    <div className="gallery-photo-actions">
+                      <button disabled={busy} onClick={() => { replacementId.current = image.id; setReplacementError(''); replaceInput.current?.click() }}>replace</button>
+                      <button disabled={busy} onClick={() => commitImage({ ...image, frameRatio: ratioFor(image) === 'vertical' ? 'landscape' : 'vertical' })}>{ratioFor(image) === 'vertical' ? 'landscape' : 'vertical'}</button>
+                      <button disabled={busy} onClick={() => { setActiveId(undefined); setReplacementError('') }}>done</button>
+                    </div>
+                  </> : <button className="gallery-edit" disabled={busy} aria-label={`Edit ${image.name}`} onClick={() => { setActiveId(image.id); setDeletePending(undefined); setReplacementError('') }}>EDIT</button>}
                   <button className="gallery-delete" disabled={busy} aria-label={`Delete ${image.name}`} title="Delete image" onClick={() => setDeletePending(image.id)}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg></button>
-                  {activeId === image.id && ['nw', 'ne', 'sw', 'se'].map((corner) => <button key={corner} disabled={busy} className={`gallery-resize gallery-resize-${corner}`} aria-label={`Resize ${image.name}`} onPointerDown={(event) => beginInteraction(event, 'resize', image)} onPointerMove={updateInteraction} onPointerUp={endInteraction} onPointerCancel={endInteraction} />)}
-                  {activeId === image.id && <label className="gallery-zoom">Zoom<input type="range" min="1" max="2.5" step="0.01" value={image.scale ?? 1} disabled={busy} aria-label={`Zoom ${image.name}`} onChange={(event) => commitImage({ ...image, scale: Number(event.target.value) })} /></label>}
                 </>}
                 {deletePending === image.id && <div className="gallery-delete-confirm" role="alertdialog" aria-label="Confirm image deletion"><span>Delete this image?</span><button disabled={busy} onClick={() => removeImage(image)}>Delete</button><button onClick={() => setDeletePending(undefined)}>Cancel</button></div>}
               </div>
@@ -248,6 +248,12 @@ export const ImageGallery = forwardRef<ImageGalleryHandle, ImageGalleryProps>(fu
       </div>
       {(displayImages.length >= 3 || edges.left || edges.right) && <nav className="gallery-scroll-controls" aria-label="Carousel navigation"><button aria-label="Scroll gallery left" disabled={!edges.left} onClick={() => scroll(-1)}>←</button><span aria-hidden="true" /><button aria-label="Scroll gallery right" disabled={!edges.right} onClick={() => scroll(1)}>→</button></nav>}
     </section>
+    {canEdit && <input ref={replaceInput} hidden type="file" accept="image/*" disabled={busy} aria-label="Replace current photo" onChange={(event) => { void replacePhoto(event.target.files?.[0]); event.currentTarget.value = '' }} />}
+    {replacementError && <p className="form-error gallery-photo-error" role="alert">{replacementError}</p>}
+    {canEdit && cropImage && <PhotoCropEditor key={cropImage.id} image={cropImage} onCancel={() => setCropId(undefined)} onDone={(next) => {
+      commitImage(next); setCropId(undefined); setActiveId(undefined)
+      requestAnimationFrame(() => viewport.current?.querySelector<HTMLElement>(`[data-image-id="${CSS.escape(next.id)}"] .gallery-edit`)?.focus())
+    }} />}
     {enlargedImage && (
       <ImageModal
         image={enlargedImage}

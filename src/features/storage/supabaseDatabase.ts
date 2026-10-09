@@ -35,8 +35,9 @@ const throwIfError = (message: string, error?: { message: string } | null) => {
 }
 
 const imagePath = (image: StoredImage) => {
-  const safeName = image.name.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'image'
-  return `${PROJECT_ID}/${image.entryId}/${image.id}-${safeName}`
+  // Replacements overwrite the current object even when the upload has a new filename.
+  if (image.storagePath?.startsWith(`${PROJECT_ID}/${image.entryId}/`)) return image.storagePath
+  return `${PROJECT_ID}/${image.entryId}/${image.id}`
 }
 
 async function uploadImage(image: StoredImage) {
@@ -97,6 +98,7 @@ export async function getImages(entryId?: string): Promise<StoredImage[]> {
       caption: row.caption,
       order: row.sort_order,
       blob: blob!,
+      storagePath: row.storage_path,
       positionX: row.position_x ?? undefined,
       positionY: row.position_y ?? undefined,
       scale: row.scale ?? undefined,
