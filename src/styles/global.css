@@ -33,13 +33,24 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 main { flex: 1; }
 
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; overflow-x: clip; }
-.site-header { min-height: 92px; display: flex; align-items: center; justify-content: space-between; gap: 40px; padding: 22px clamp(24px, 6vw, 96px) 14px; border-bottom: 1px solid var(--line-soft); color: var(--text); }
-.wordmark { display: grid; gap: 2px; border: 0; padding: 0; text-align: left; color: inherit; background: transparent; }
+.site-header { position: relative; z-index: 20; min-height: 92px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, min(42vw, 500px)) minmax(0, 1fr); align-items: center; gap: clamp(16px, 3vw, 40px); padding: 22px clamp(24px, 6vw, 96px) 14px; border-bottom: 1px solid var(--line-soft); color: var(--text); }
+.wordmark { display: grid; justify-self: start; gap: 2px; border: 0; padding: 0; text-align: left; color: inherit; background: transparent; }
 .wordmark strong { color: var(--accent); font-family: var(--font-display); font-size: clamp(1.22rem, 2vw, 1.72rem); font-weight: 800; letter-spacing: .04em; line-height: 1; }
 .wordmark span { color: var(--text-secondary); font-size: .78rem; letter-spacing: .08em; }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; }
 .mode-switch-button { border: 0; border-bottom: 1px solid transparent; padding: 6px 0; background: transparent; color: var(--text-secondary); font-family: var(--font-meta); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
 .mode-switch-button:hover { border-bottom-color: var(--accent-muted); color: var(--text); }
+
+.entry-search { position: relative; min-width: 0; width: 100%; }
+.entry-search-field { position: relative; }
+.entry-search-field input { height: 42px; border: 1px solid var(--line-soft); border-radius: 6px; padding: 10px 44px 10px 14px; background: rgba(27, 27, 25, .7); color: var(--text); font-size: .82rem; }
+.entry-search-field input::placeholder { color: var(--text-secondary); }
+.entry-search-field input:focus { border-color: var(--accent-muted); outline: 0; }
+.entry-search-field input::-webkit-search-cancel-button { cursor: pointer; }
+.entry-search-field svg { position: absolute; top: 11px; right: 13px; width: 20px; height: 20px; color: var(--text-secondary); pointer-events: none; }
+.entry-search-suggestions { position: absolute; z-index: 1; top: calc(100% + 6px); left: 0; right: 0; max-height: min(320px, 50dvh); margin: 0; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line-soft); border-radius: 6px; padding: 6px 0; background: var(--background-secondary); box-shadow: var(--shadow); list-style: none; }
+.entry-search-option { display: block; width: 100%; min-height: 42px; border: 0; padding: 10px 14px; background: transparent; color: var(--text-secondary); font-size: .82rem; line-height: 1.5; text-align: left; overflow-wrap: anywhere; }
+.entry-search-option:hover, .entry-search-option.is-active { color: var(--accent); }
 
 .lookbook-navigation { position: relative; z-index: 10; padding: 8px clamp(24px, 6vw, 96px) 16px; background: linear-gradient(180deg, rgba(27, 27, 25, .96) 0%, rgba(27, 27, 25, .9) 100%); }
 .category-navigation-row, .entry-navigation-row { display: flex; align-items: center; justify-content: center; gap: 24px; }
@@ -487,7 +498,9 @@ footer span { color: var(--accent-muted); letter-spacing: .12em; }
 }
 
 @media (max-width: 700px) {
-  .site-header { min-height: 82px; align-items: start; padding: 19px 20px 12px; }
+  .site-header { min-height: 82px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 19px 20px 12px; }
+  .header-actions { grid-column: 2; grid-row: 1; }
+  .entry-search { grid-column: 1 / -1; grid-row: 2; }
   .wordmark strong { font-size: 1.05rem; }
   .wordmark span { font-size: .69rem; }
   .mode-switch-button { font-size: .65rem; }
@@ -524,7 +537,7 @@ footer span { color: var(--accent-muted); letter-spacing: .12em; }
 }
 
 @media (max-width: 420px) {
-  .site-header { gap: 20px; }
+  .site-header { gap: 16px; }
   .wordmark { max-width: 170px; }
   .page-shell, .entry-page { width: calc(100% - 30px); }
   .scene-facets { grid-template-columns: 1fr; gap: 22px; }
