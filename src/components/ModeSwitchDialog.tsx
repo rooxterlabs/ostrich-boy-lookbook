@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react'
 
 interface ModeSwitchDialogProps {
   onCancel: () => void
-  onSubmit: (password: string) => Promise<boolean>
+  onSubmit: (password: string) => boolean | Promise<boolean>
 }
 
 export function ModeSwitchDialog({ onCancel, onSubmit }: ModeSwitchDialogProps) {
@@ -25,9 +25,9 @@ export function ModeSwitchDialog({ onCancel, onSubmit }: ModeSwitchDialogProps) 
     setSubmitting(true)
     setError('')
     try {
-      if (!await onSubmit(password)) setError('That password was not accepted.')
+      if (!await onSubmit(password)) setError('Incorrect password')
     } catch {
-      setError('Unable to switch modes. Check your connection and try again.')
+      setError('Unable to remember Editor Mode in this browser.')
     } finally {
       setSubmitting(false)
     }
@@ -36,7 +36,7 @@ export function ModeSwitchDialog({ onCancel, onSubmit }: ModeSwitchDialogProps) 
   return (
     <div className="mode-dialog-backdrop" role="presentation" onMouseDown={(event) => !submitting && event.target === event.currentTarget && onCancel()}>
       <section className="mode-dialog" role="dialog" aria-modal="true" aria-labelledby="mode-dialog-title">
-        <h2 id="mode-dialog-title">Editor Mode</h2>
+        <h2 id="mode-dialog-title">PASSWORD</h2>
         <form onSubmit={submit}>
           <div className="password-field">
             <input
@@ -70,7 +70,7 @@ export function ModeSwitchDialog({ onCancel, onSubmit }: ModeSwitchDialogProps) 
           </div>
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="mode-dialog-actions">
-            <button className="button button-accent" disabled={submitting || !password} type="submit">{submitting ? 'Signing in…' : 'Continue'}</button>
+            <button className="button button-accent" disabled={submitting || !password} type="submit">Continue</button>
             <button className="button" disabled={submitting} type="button" onClick={onCancel}>Cancel</button>
           </div>
         </form>

@@ -3,6 +3,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim() || 'https://wrqpiuwluhvbgvxkvzxc.supabase.co'
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || 'sb_publishable_bPTR_hzDqpN4ee9OLpoNHQ_sVHjLMVj'
 
+export const editorApiUrl = `${supabaseUrl}/functions/v1/lookbook-editor`
+export const getPublishableKey = () => supabasePublishableKey
+
 let client: SupabaseClient | undefined
 
 export const isSupabaseConfigured = () => Boolean(supabaseUrl && supabasePublishableKey)
@@ -13,12 +16,8 @@ export function getSupabaseClient() {
   }
 
   client ??= createClient(supabaseUrl, supabasePublishableKey, {
-    auth: {
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
-      // Viewer stays public; re-entering Editor after a reload needs a password.
-      persistSession: false,
-    },
+    // Use anonymous Database/Storage reads without initializing Supabase Auth.
+    accessToken: async () => null,
   })
 
   return client

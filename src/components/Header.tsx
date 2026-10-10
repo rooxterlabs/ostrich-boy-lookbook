@@ -8,10 +8,9 @@ interface HeaderProps {
   onHome?: () => void
   onMovieInfo: () => void
   onSwitchMode: () => void
-  switchingMode?: boolean
 }
 
-export function Header({ role, entries, onEntry, onMovieInfo, onSwitchMode, switchingMode = false }: HeaderProps) {
+export function Header({ role, entries, onEntry, onMovieInfo, onSwitchMode }: HeaderProps) {
   return (
     <header className="site-header">
       <button className="wordmark" onClick={onMovieInfo} aria-label="Go to OSTRICH BOY MOVIE INFO">
@@ -20,8 +19,8 @@ export function Header({ role, entries, onEntry, onMovieInfo, onSwitchMode, swit
       </button>
       <EntrySearch entries={entries} onEntry={onEntry} />
       <nav className="header-actions" aria-label="Lookbook modes">
-        <button className="mode-switch-button" disabled={switchingMode} onClick={onSwitchMode}>
-          {role === 'editor' ? 'Back to View' : 'Edit'}
+        <button className="mode-switch-button" onClick={onSwitchMode}>
+          {role === 'editor' ? 'Exit Editor Mode' : 'Edit'}
         </button>
       </nav>
     </header>

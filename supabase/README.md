@@ -1,53 +1,69 @@
-# Supabase setup
+# Supabase Database and Storage
 
-The app is prepared for a Supabase project using two local Vite variables:
+The browser uses only `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_PUBLISHABLE_KEY`, as shown in `.env.example`. Never place a
+secret/service-role key in Vite variables, frontend code, or the repository.
 
-```env
-VITE_SUPABASE_URL=https://your-project-ref.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
+## Current access model
+
+Viewer reads `lookbook_projects`, `lookbook_images`, and the private
+`lookbook-images` bucket through the existing anonymous read policies.
+Editor Mode uses the one password in `src/config/auth.ts`, with a tab session
+in `sessionStorage`. Switching modes makes no Supabase Auth requests.
+
+Project saves, image uploads/replacements/metadata updates, and deletions go
+through `functions/lookbook-editor`. Its handler checks the same password
+before creating a server-side Supabase client. Its operation allowlist is
+limited to project `ostrich-boy` and bucket `lookbook-images`. It does not
+accept caller-selected tables, SQL, buckets, project IDs, or storage paths.
+
+The Edge Function uses the server's built-in `SUPABASE_SERVICE_ROLE_KEY` to
+perform those operations. That credential bypasses RLS, so the handler's
+project/bucket checks are required. Public database write grants and Storage
+policies do not need to change. The original UUID/role-based policies and
+tables can remain as historical configuration; this app no longer uses them
+for mode access or editing. No Auth users need to be deleted or recreated.
+
+This is a lightweight gate: the password is intentionally included in the
+browser bundle. Anyone who discovers it can call the permitted endpoint
+operations. It does not provide private, user-based authorization.
+
+## Deploy the write endpoint
+
+From the application root, use a trusted shell with a Supabase deployment
+access token configured outside the repository as `SUPABASE_ACCESS_TOKEN`:
+
+```powershell
+npx supabase functions deploy lookbook-editor --project-ref wrqpiuwluhvbgvxkvzxc --no-verify-jwt --use-api
 ```
 
-Keep real values in `.env.local`; Git ignores that file. Never put a secret or
-service-role key in a `VITE_` variable because Vite exposes those values to the
-browser bundle.
+`config.toml` disables the Supabase Auth JWT requirement for this function;
+the handler performs the password check itself. Supabase supplies the
+server URL/service-role key automatically in its hosted runtime. No secret
+needs to be copied into browser code. The function imports the password
+from `src/config/auth.ts`; deploy from the full application checkout.
 
-## Apply the schema
+Deploy the function before publishing the updated frontend. A GitHub Pages
+deployment alone does not deploy it. Whenever changing `EDITOR_PASSWORD`,
+redeploy both the function and the website together. A missing function
+leaves public viewing available but prevents saving; there is no fallback
+to anonymous writes or the retired Auth flow.
 
-Run `migrations/20261001000000_create_lookbook_storage.sql` in the Supabase SQL
-Editor, or apply it with an authenticated Supabase CLI session. It creates:
+## Inspect and verify
 
-- `lookbook_projects` for the structured lookbook document;
-- `lookbook_images` for image metadata and editorial transforms;
-- the private `lookbook-images` Storage bucket.
+`audit/current_access.sql` contains read-only queries for the live grants,
+RLS policies, role function, and bucket configuration. Run it in the
+project's SQL Editor to inspect dashboard-only changes. Do not rerun the
+historical anonymous-write migrations.
 
-The original `20261001010000_add_viewer_editor_auth.sql` established the existing
-Editor account's role mapping. Do not reset that account or its password.
+```powershell
+npx deno check --config supabase/functions/lookbook-editor/deno.json supabase/functions/lookbook-editor/index.ts
+npx deno test --config supabase/functions/lookbook-editor/deno.json tests/editor-api.test.ts
+npm run build
+npm run lint
+```
 
-For public Viewer access with protected editing, apply
-`migrations/20261006020000_restore_editor_password_access.sql` in the Lookbook
-project's SQL Editor. It is re-runnable, validates the existing Editor role,
-and changes privileges/policies without replacing content or images.
-
-The latest migration supersedes the earlier direct-write access migrations.
-Do not re-run those migrations after restoring Editor protection.
-
-Anonymous access retains `SELECT` on the project and image metadata, with
-read-only RLS policies scoped to `ostrich-boy` and `lookbook-images`. Anonymous
-project/metadata write grants are revoked. Storage restrictive policies deny
-anonymous uploads, updates and deletion in this bucket without affecting other
-buckets. Authenticated writes require the existing `editor` role from
-`lookbook_access_roles`. Upload/upsert and delete permissions are included.
-
-Viewer opens without logging in. Edit uses the existing
-`editor@ostrich-boy.invalid` account through Supabase Auth. Returning to View
-signs out only the current session. Sessions are not stored, so reloads return
-to public Viewer mode and entering Editor again requires the password.
-
-**A GitHub/frontend deployment does not apply these SQL changes.** A live
-`42501: permission denied for table lookbook_projects` indicates that the
-anonymous PostgreSQL role lacks table privileges. Fix the grants first, then
-check the RLS policies. The repair SQL ends with queries showing both.
-
-An empty remote project displays the local seed data until it is saved from
-direct Editor mode. Supabase becomes the active shared data source once that
-project exists.
+The endpoint tests use isolated Database/Storage fixtures. Live verification
+must additionally save and restore a test edit and upload, update, order,
+download, and remove disposable images after deployment. The existing
+published content must remain intact.

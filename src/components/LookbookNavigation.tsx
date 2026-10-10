@@ -49,7 +49,6 @@ export function LookbookNavigation({ categories, entries, activeCategoryId, acti
   const activeCategory = categories.find((category) => category.id === activeCategoryId)
   const containedEntries = activeCategory ? entries.filter((entry) => entry.categoryIds.includes(activeCategory.id)) : []
   const categoryScroll = useNavigationScroll(categories.length)
-  const { viewport: entryViewport, edges: entryEdges, measureEdges: measureEntryEdges, scroll: scrollEntries } = useNavigationScroll(containedEntries.length, activeCategoryId)
   return <div className="lookbook-navigation">
     <div className="category-navigation-row"><div className={`category-navigation-boundary ${categoryScroll.edges.left ? 'has-left-edge' : ''} ${categoryScroll.edges.right ? 'has-right-edge' : ''}`}><nav className="category-navigation" ref={categoryScroll.viewport} onScroll={categoryScroll.measureEdges} tabIndex={0} aria-label="Lookbook sections" onKeyDown={(event) => {
       if (event.target !== event.currentTarget) return
@@ -59,13 +58,9 @@ export function LookbookNavigation({ categories, entries, activeCategoryId, acti
     </div></nav></div>{role === 'editor' && <button className="button button-accent navigation-edit" aria-label="Edit categories" onClick={onEditCategories}>EDIT</button>}
     {categoryScroll.edges.overflow && <div className="category-navigation-controls"><div className="category-scroll-controls" role="group" aria-label="Category row navigation"><button aria-label="Scroll categories left" disabled={!categoryScroll.edges.left} onClick={() => categoryScroll.scroll(-1)}>←</button><span aria-hidden="true" /><button aria-label="Scroll categories right" disabled={!categoryScroll.edges.right} onClick={() => categoryScroll.scroll(1)}>→</button></div></div>}
     </div>
-    {activeCategory && <div className="entry-navigation-row"><div className={`entry-navigation-boundary ${entryEdges.left ? 'has-left-edge' : ''} ${entryEdges.right ? 'has-right-edge' : ''}`}><nav className="entry-navigation" ref={entryViewport} onScroll={measureEntryEdges} tabIndex={0} aria-label={`${activeCategory.name} entries`} onKeyDown={(event) => {
-      if (event.target !== event.currentTarget) return
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); scrollEntries(event.key === 'ArrowLeft' ? -1 : 1) }
-    }}><div className="entry-navigation-track">
+    {activeCategory && <div className="entry-navigation-row"><nav className="entry-navigation" aria-label={`${activeCategory.name} entries`}><div className="entry-navigation-track">
       {containedEntries.map((entry) => <button className={entry.id === activeEntryId ? 'active' : ''} key={entry.id} onClick={() => onEntry(entry.id)}>{entry.id === activeEntryId && <span aria-hidden="true" />}{entry.title}</button>)}
-    </div></nav></div>{role === 'editor' && <button className="button button-accent navigation-edit" aria-label="Edit entries" onClick={onEditEntries}>EDIT</button>}
-    {entryEdges.overflow && <div className="entry-navigation-controls"><div className="entry-scroll-controls" role="group" aria-label="Entry row navigation"><button aria-label="Scroll entries left" disabled={!entryEdges.left} onClick={() => scrollEntries(-1)}>←</button><span aria-hidden="true" /><button aria-label="Scroll entries right" disabled={!entryEdges.right} onClick={() => scrollEntries(1)}>→</button></div></div>}
+    </div></nav>{role === 'editor' && <button className="button button-accent navigation-edit" aria-label="Edit entries" onClick={onEditEntries}>EDIT</button>}
     </div>}
   </div>
 }

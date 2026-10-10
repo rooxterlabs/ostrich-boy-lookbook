@@ -1,0 +1,3 @@
+[functions.lookbook-editor]
+# The handler checks the code-defined password instead of a Supabase Auth JWT.
+verify_jwt = false

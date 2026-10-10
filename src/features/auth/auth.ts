@@ -1,28 +1,18 @@
-import { getSupabaseClient } from '../supabase/client'
+import { EDITOR_PASSWORD } from '../../config/auth'
 
-export async function authenticateEditor(password: string) {
-  const supabase = getSupabaseClient()
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: 'editor@ostrich-boy.invalid',
-    password,
-  })
-  if (error || !data.user) return false
+const EDITOR_SESSION_KEY = 'ostrich-boy-editor-session'
 
-  const { data: access, error: accessError } = await supabase
-    .from('lookbook_access_roles')
-    .select('role')
-    .eq('user_id', data.user.id)
-    .maybeSingle()
+export function hasEditorSession() {
+  try { return sessionStorage.getItem(EDITOR_SESSION_KEY) === 'active' }
+  catch { return false }
+}
 
-  if (accessError || access?.role !== 'editor') {
-    await supabase.auth.signOut({ scope: 'local' })
-    return false
-  }
+export function authenticateEditor(password: string) {
+  if (password !== EDITOR_PASSWORD) return false
+  sessionStorage.setItem(EDITOR_SESSION_KEY, 'active')
   return true
 }
 
-export async function endEditorSession() {
-  // Local scope signs out this tab without interrupting other editors.
-  // Supabase also clears the in-memory session if the logout request fails.
-  await getSupabaseClient().auth.signOut({ scope: 'local' })
+export function endEditorSession() {
+  sessionStorage.removeItem(EDITOR_SESSION_KEY)
 }

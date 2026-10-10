@@ -4,9 +4,8 @@ import type { GalleryChanges } from './components/ImageGallery'
 import { Header } from './components/Header'
 import { LookbookNavigation } from './components/LookbookNavigation'
 import { ModeSwitchDialog } from './components/ModeSwitchDialog'
-import { authenticateEditor, endEditorSession } from './features/auth/auth'
-import { getSupabaseClient } from './features/supabase/client'
-import { deleteImage, getImages, loadProject, putImage, saveProject, saveProjectAndDeleteImages } from './features/storage/supabaseDatabase'
+import { authenticateEditor, endEditorSession, hasEditorSession } from './features/auth/auth'
+import { deleteImage, getImages, loadProject, lookbookChangeSource, putImage, saveProject, saveProjectAndDeleteImages } from './features/storage/supabaseDatabase'
 import { categoryEntryType, newEntry } from './models/entry'
 import type { Category, LookbookEntry, ProjectData, Role, StoredImage } from './models/lookbook'
 import { EntryPage } from './pages/EntryPage'
@@ -19,17 +18,16 @@ import { MovieInfoPage } from './pages/MovieInfoPage'
 type Route = { page: 'items' | 'scenes' | 'folders' | 'movie-info' } | { page: 'folder'; id: string } | { page: 'entry'; id: string }
 
 // Update this label when releasing a new lookbook version.
-const APP_VERSION = 'v01.13'
+const APP_VERSION = 'v01.14'
 
 const DEFAULT_ENTRY_ID = ''
 const DEFAULT_CATEGORY_ID = ''
 const RETIRED_SEED_CATEGORY_IDS = new Set(['category-props', 'category-costumes', 'category-hair-makeup', 'category-production-design', 'category-references'])
 
 export default function App() {
-  const [role, setRoleState] = useState<Role>('viewer')
+  const [role, setRoleState] = useState<Role>(() => hasEditorSession() ? 'editor' : 'viewer')
   const [editing, setEditing] = useState<'category' | 'entry'>()
   const [enteringEditor, setEnteringEditor] = useState(false)
-  const [switchingToView, setSwitchingToView] = useState(false)
   const [project, setProject] = useState<ProjectData>()
   const [images, setImages] = useState<StoredImage[]>([])
   const [route, setRoute] = useState<Route>({ page: 'entry', id: DEFAULT_ENTRY_ID })
@@ -38,21 +36,14 @@ export default function App() {
   const projectRef = useRef<ProjectData | undefined>(undefined)
 
   useEffect(() => { projectRef.current = project }, [project])
-  useEffect(() => {
-    const { data: { subscription } } = getSupabaseClient().auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') {
-        setRoleState('viewer')
-        setEditing(undefined)
-      }
-    })
-    return () => subscription.unsubscribe()
-  }, [])
 
   const refreshImages = useCallback(async () => setImages(await getImages()), [])
   useEffect(() => { loadProject().then(async (data) => [data, await getImages()] as const).then(([data, storedImages]) => { setProject(data); setImages(storedImages); setError('') }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load the lookbook.')).finally(() => setLoading(false)) }, [])
   useEffect(() => {
     const channel = new BroadcastChannel('lookbook-changes')
-    channel.onmessage = () => {
+    channel.onmessage = (event) => {
+      // The saving tab applies its final state itself; do not reload mid-save.
+      if (event.data?.source === lookbookChangeSource) return
       loadProject().then(async (data) => { setProject(data); setImages(await getImages()) }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to refresh the lookbook.'))
     }
     return () => channel.close()
@@ -89,8 +80,8 @@ export default function App() {
     if (role === 'viewer') { setEnteringEditor(true); return }
     setEditing(undefined)
     if (!canViewerAccessCurrentRoute) home()
-    setSwitchingToView(true)
-    void endEditorSession().finally(() => { setRole('viewer'); setSwitchingToView(false) })
+    endEditorSession()
+    setRole('viewer')
   }
   const navigateCategory = (id: string) => {
     const firstEntry = visibleEntries.find((candidate) => candidate.categoryIds.includes(id))
@@ -225,5 +216,5 @@ export default function App() {
     return <main className="page-shell"><div className="empty-state"><h1>{visibleCategories.length ? 'Select a category' : 'Your lookbook is empty.'}</h1><p>{role === 'editor' ? 'Use EDIT to add and manage your categories and entries.' : 'New material will appear here when it is added.'}</p></div></main>
   })()
 
-  return <div className="app-shell"><Header role={role} entries={visibleEntries} onEntry={(id) => setRoute({ page: 'entry', id })} onMovieInfo={() => setRoute({ page: 'movie-info' })} onHome={home} onSwitchMode={switchMode} switchingMode={switchingToView} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>{APP_VERSION}</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}{enteringEditor && <ModeSwitchDialog onCancel={() => setEnteringEditor(false)} onSubmit={async (password) => { if (!await authenticateEditor(password)) return false; setRole('editor'); setEnteringEditor(false); return true }} />}</div>
+  return <div className="app-shell"><Header role={role} entries={visibleEntries} onEntry={(id) => setRoute({ page: 'entry', id })} onMovieInfo={() => setRoute({ page: 'movie-info' })} onHome={home} onSwitchMode={switchMode} /><LookbookNavigation categories={visibleCategories.filter((category) => !category.parentId)} entries={visibleEntries} activeCategoryId={activeCategoryId} activeEntryId={activeEntry?.id} role={role} onCategory={navigateCategory} onEntry={(id) => setRoute({ page: 'entry', id })} onEditCategories={() => setEditing('category')} onEditEntries={() => setEditing('entry')} />{error && <div className="error-banner" role="alert">{error}</div>}{content}<footer><span>{APP_VERSION}</span></footer>{editing && role === 'editor' && <ListEditorDialog noun={editing} categoryName={editing === 'entry' ? (visibleCategories.find((c) => c.id === activeCategoryId)?.name ?? undefined) : undefined} items={editing === 'category' ? [...project.categories].sort((a, b) => a.order - b.order).map((item) => ({ id: item.id, name: item.name })) : project.entries.filter((item) => item.categoryIds.includes(activeCategoryId)).map((item) => ({ id: item.id, name: item.title }))} onSave={batchSaveList} onClose={() => setEditing(undefined)} />}{enteringEditor && <ModeSwitchDialog onCancel={() => setEnteringEditor(false)} onSubmit={(password) => { if (!authenticateEditor(password)) return false; setRole('editor'); setEnteringEditor(false); return true }} />}</div>
 }
