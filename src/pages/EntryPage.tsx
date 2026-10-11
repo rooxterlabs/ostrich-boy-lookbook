@@ -96,11 +96,11 @@ export function EntryPage(props: EntryPageProps) {
   }
 
   return <main className={`page-shell entry-page ${canEdit ? 'is-editing' : ''}`}>
-    <ImageGallery ref={galleryRef} images={images} canEdit={canEdit} busy={busy} onDirtyChange={setGalleryDirty} />
-    {canEdit && <div className="entry-gallery-actions"><EditorToolbar name={entry.title} editing busy={busy} dirty={dirty} onEdit={startEditing} onSave={() => void save()} onCancel={cancelEditing} /></div>}
     <div className="entry-title-row"><div>{canEdit ? <><label className="field">Name<input value={draft.title} disabled={busy} onChange={(event) => update('title', event.target.value)} /></label><label className="field">Subtext<input placeholder={`e.g. Jim\u2019s Right-Hand Man \u00b7 30\u2019s`} value={draft.subtext} disabled={busy} onChange={(event) => update('subtext', event.target.value)} /></label></> : <><h1>{entry.title}</h1>{draft.subtext && <p className="entry-role">{draft.subtext}</p>}</>}</div>
       {role === 'editor' && !canEdit && <EditorToolbar name={entry.title} editing={false} busy={busy} dirty={dirty} onEdit={startEditing} onSave={() => void save()} onCancel={cancelEditing} />}
     </div>
+    <ImageGallery ref={galleryRef} images={images} canEdit={canEdit} busy={busy} onDirtyChange={setGalleryDirty} />
+    {canEdit && <div className="entry-gallery-actions"><EditorToolbar name={entry.title} editing busy={busy} dirty={dirty} onEdit={startEditing} onSave={() => void save()} onCancel={cancelEditing} /></div>}
     {error && <p className="form-error" role="alert">{error}</p>}
     {canEdit ? <label className="field entry-description-field">Description<textarea rows={5} disabled={busy} value={draft.description} onChange={(event) => update('description', event.target.value)} /></label> : draft.description ? <p className="lead-copy entry-description-copy preserve-lines">{draft.description}</p> : <p className="muted entry-description-copy">No description has been added.</p>}
     <fieldset className="entry-content-fields" disabled={busy}>

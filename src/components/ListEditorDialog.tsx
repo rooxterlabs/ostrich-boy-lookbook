@@ -173,6 +173,7 @@ export function ListEditorDialog({
                 onChange={(e) => handleNameEdit(item.id, e.target.value)}
               />
               <div className="list-editor-controls">
+                {noun === 'entry' && <>
                 <button
                   className="button"
                   aria-label={`Move ${item.name} up`}
@@ -189,6 +190,7 @@ export function ListEditorDialog({
                 >
                   ↓
                 </button>
+                </>}
                 <button
                   className="button danger-button"
                   onClick={() => setConfirmDelete(item)}
